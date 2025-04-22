@@ -12,6 +12,9 @@ import DashboardLayout from './components/layout/DashboardLayout';
 import EmployeeDashboard from './pages/employee/EmployeeDashboard';
 import EmployeeTasks from './pages/employee/EmployeeTasks';
 import OwnerDashboard from './pages/owner/OwnerDashboard';
+import OwnerTasks from './pages/owner/OwnerTasks';
+import AdminTasks from './pages/admin/AdminTasks';
+import ClientTasks from './pages/client/ClientTasks';
 
 const queryClient = new QueryClient();
 
@@ -30,9 +33,9 @@ const App = () => (
             {/* Owner routes */}
             <Route path="/owner" element={<DashboardLayout />}>
               <Route path="dashboard" element={<OwnerDashboard />} />
+              <Route path="tasks" element={<OwnerTasks />} />
               <Route path="clients" element={<div>Clients Management</div>} />
               <Route path="employees" element={<div>Employee Management</div>} />
-              <Route path="tasks" element={<div>Tasks Management</div>} />
               <Route path="invoices" element={<div>Invoices Management</div>} />
               <Route path="calendar" element={<div>Calendar</div>} />
               <Route path="analytics" element={<div>Analytics</div>} />
@@ -42,9 +45,9 @@ const App = () => (
             {/* Super Admin routes */}
             <Route path="/admin" element={<DashboardLayout />}>
               <Route path="dashboard" element={<div>Admin Dashboard</div>} />
-              <Route path="employees" element={<div>Employee Management</div>} />
-              <Route path="tasks" element={<div>Tasks Management</div>} />
+              <Route path="tasks" element={<AdminTasks />} />
               <Route path="templates" element={<div>Task Templates</div>} />
+              <Route path="employees" element={<div>Employee Management</div>} />
               <Route path="invoices" element={<div>Invoices Management</div>} />
               <Route path="analytics" element={<div>Analytics</div>} />
             </Route>
@@ -61,7 +64,7 @@ const App = () => (
             {/* Client routes */}
             <Route path="/client" element={<DashboardLayout />}>
               <Route path="dashboard" element={<div>Client Dashboard</div>} />
-              <Route path="tasks" element={<div>My Tasks</div>} />
+              <Route path="tasks" element={<ClientTasks />} />
               <Route path="invoices" element={<div>My Invoices</div>} />
               <Route path="chat" element={<div>Messages</div>} />
             </Route>
