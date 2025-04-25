@@ -1,3 +1,4 @@
+
 import { useState, useCallback } from 'react';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
@@ -6,7 +7,9 @@ import { RootState } from '@/store';
 import { PieChart, Pie, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
 import { DashboardWidget } from '@/components/dashboard/DashboardWidget';
 import { AddWidgetButton } from '@/components/dashboard/AddWidgetButton';
+import { Button } from '@/components/ui/button';
 import {
+  Card,
   CardContent,
   CardDescription,
   CardHeader,
@@ -43,6 +46,24 @@ const OwnerDashboard = () => {
   const inProgressTasks = tasks.filter(task => task.status === 'inprogress').length;
   const todoTasks = tasks.filter(task => task.status === 'todo').length;
   const reviewTasks = tasks.filter(task => task.status === 'review').length;
+  
+  // Task status data for chart
+  const taskStatusData = [
+    { name: 'Completed', value: completedTasks, color: '#10b981' },
+    { name: 'In Progress', value: inProgressTasks, color: '#3b82f6' },
+    { name: 'To Do', value: todoTasks, color: '#6b7280' },
+    { name: 'Review', value: reviewTasks, color: '#f59e0b' },
+  ];
+
+  // Revenue by month data
+  const revenueByMonthData = [
+    { name: 'Jan', revenue: 15000 },
+    { name: 'Feb', revenue: 20000 },
+    { name: 'Mar', revenue: 18000 },
+    { name: 'Apr', revenue: 25000 },
+    { name: 'May', revenue: 30000 },
+    { name: 'Jun', revenue: 28000 },
+  ];
 
   // Sample client data (in a real app, this would come from API/Redux)
   const clients = [
