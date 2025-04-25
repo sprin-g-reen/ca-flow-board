@@ -1,5 +1,7 @@
 
 import { useState } from 'react';
+import { useSelector, useDispatch } from 'react-redux';
+import { RootState } from '@/store';
 import { PlusSquare, Search, UserPlus } from 'lucide-react';
 import {
   Card,
@@ -25,8 +27,14 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import { FormDialog } from '@/components/shared/FormDialog';
+import { AddEmployeeForm } from '@/components/forms/AddEmployeeForm';
+import { toggleModal } from '@/store/slices/uiSlice';
 
 const OwnerEmployees = () => {
+  const dispatch = useDispatch();
+  const { modals } = useSelector((state: RootState) => state.ui);
+  
   // In a real app, this would come from the API
   const employees = [
     { id: 301, name: 'Jane Smith', role: 'Senior Accountant', email: 'jane@example.com', phone: '+91 98765 43210', status: 'active' },
@@ -42,6 +50,14 @@ const OwnerEmployees = () => {
   ];
 
   const [activeTab, setActiveTab] = useState('employees');
+
+  const handleOpenAddEmployeeModal = () => {
+    dispatch(toggleModal({ modal: 'addEmployee', value: true }));
+  };
+  
+  const handleCloseAddEmployeeModal = () => {
+    dispatch(toggleModal({ modal: 'addEmployee', value: false }));
+  };
 
   return (
     <div className="p-6 space-y-6">
@@ -64,7 +80,10 @@ const OwnerEmployees = () => {
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input placeholder={`Search ${activeTab}`} className="pl-8" />
               </div>
-              <Button className="bg-ca-blue hover:bg-ca-blue-dark">
+              <Button 
+                className="bg-ca-blue hover:bg-ca-blue-dark"
+                onClick={handleOpenAddEmployeeModal}
+              >
                 {activeTab === "employees" ? (
                   <UserPlus className="mr-2 h-4 w-4" />
                 ) : (
@@ -168,6 +187,16 @@ const OwnerEmployees = () => {
               </Table>
             </TabsContent>
           </Tabs>
+          
+          <FormDialog
+            open={modals.addEmployee}
+            onOpenChange={handleCloseAddEmployeeModal}
+            title="Add New Employee"
+            description="Create a new employee record for your firm"
+            showFooter={false}
+          >
+            <AddEmployeeForm onSuccess={handleCloseAddEmployeeModal} />
+          </FormDialog>
         </CardContent>
       </Card>
     </div>

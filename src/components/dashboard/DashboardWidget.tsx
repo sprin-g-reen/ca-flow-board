@@ -12,7 +12,7 @@ interface DashboardWidgetProps {
 export const DashboardWidget = ({ id, index, children, moveWidget }: DashboardWidgetProps) => {
   const [{ isDragging }, drag] = useDrag({
     type: 'WIDGET',
-    item: { id, index },
+    item: () => ({ id, index }),
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
     }),

@@ -1,7 +1,7 @@
 
-import { FileText, Plus, Search } from 'lucide-react';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '@/store';
+import { FileText, Plus, Search } from 'lucide-react';
 import { format } from 'date-fns';
 import {
   Card,
@@ -23,9 +23,22 @@ import {
 import {
   Badge
 } from "@/components/ui/badge";
+import { FormDialog } from '@/components/shared/FormDialog';
+import { AddInvoiceForm } from '@/components/forms/AddInvoiceForm';
+import { toggleModal } from '@/store/slices/uiSlice';
 
 const OwnerInvoices = () => {
+  const dispatch = useDispatch();
   const { invoices } = useSelector((state: RootState) => state.invoices);
+  const { modals } = useSelector((state: RootState) => state.ui);
+
+  const handleOpenAddInvoiceModal = () => {
+    dispatch(toggleModal({ modal: 'addInvoice', value: true }));
+  };
+  
+  const handleCloseAddInvoiceModal = () => {
+    dispatch(toggleModal({ modal: 'addInvoice', value: false }));
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -57,7 +70,10 @@ const OwnerInvoices = () => {
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input placeholder="Search invoices" className="pl-8" />
             </div>
-            <Button className="bg-ca-blue hover:bg-ca-blue-dark">
+            <Button 
+              className="bg-ca-blue hover:bg-ca-blue-dark"
+              onClick={handleOpenAddInvoiceModal}
+            >
               <Plus className="mr-2 h-4 w-4" />
               Create Invoice
             </Button>
@@ -96,6 +112,16 @@ const OwnerInvoices = () => {
               ))}
             </TableBody>
           </Table>
+          
+          <FormDialog
+            open={modals.addInvoice}
+            onOpenChange={handleCloseAddInvoiceModal}
+            title="Create New Invoice"
+            description="Generate an invoice for your client"
+            showFooter={false}
+          >
+            <AddInvoiceForm onSuccess={handleCloseAddInvoiceModal} />
+          </FormDialog>
         </CardContent>
       </Card>
     </div>

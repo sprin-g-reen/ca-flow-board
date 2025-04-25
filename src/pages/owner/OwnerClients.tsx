@@ -1,5 +1,5 @@
 
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '@/store';
 import { PlusSquare, Search } from 'lucide-react';
 import {
@@ -19,8 +19,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { FormDialog } from '@/components/shared/FormDialog';
+import { AddClientForm } from '@/components/forms/AddClientForm';
+import { toggleModal } from '@/store/slices/uiSlice';
 
 const OwnerClients = () => {
+  const dispatch = useDispatch();
+  const { modals } = useSelector((state: RootState) => state.ui);
+  
   // In a real app, this would come from the API
   const clients = [
     { id: 101, name: 'ABC Corp', contactPerson: 'John Smith', email: 'john@abccorp.com', phone: '+91 98765 43210', status: 'active' },
@@ -29,6 +35,14 @@ const OwnerClients = () => {
     { id: 104, name: 'Johnson LLC', contactPerson: 'Michael Johnson', email: 'michael@johnsonllc.com', phone: '+91 65432 10987', status: 'inactive' },
     { id: 105, name: 'Patel Enterprises', contactPerson: 'Amit Patel', email: 'amit@patelent.com', phone: '+91 54321 09876', status: 'active' },
   ];
+
+  const handleOpenAddClientModal = () => {
+    dispatch(toggleModal({ modal: 'addClient', value: true }));
+  };
+  
+  const handleCloseAddClientModal = () => {
+    dispatch(toggleModal({ modal: 'addClient', value: false }));
+  };
 
   return (
     <div className="p-6 space-y-6">
@@ -45,7 +59,10 @@ const OwnerClients = () => {
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input placeholder="Search clients" className="pl-8" />
             </div>
-            <Button className="bg-ca-blue hover:bg-ca-blue-dark">
+            <Button 
+              className="bg-ca-blue hover:bg-ca-blue-dark"
+              onClick={handleOpenAddClientModal}
+            >
               <PlusSquare className="mr-2 h-4 w-4" />
               Add New Client
             </Button>
@@ -86,6 +103,16 @@ const OwnerClients = () => {
               ))}
             </TableBody>
           </Table>
+          
+          <FormDialog
+            open={modals.addClient}
+            onOpenChange={handleCloseAddClientModal}
+            title="Add New Client"
+            description="Create a new client record for your firm"
+            showFooter={false}
+          >
+            <AddClientForm onSuccess={handleCloseAddClientModal} />
+          </FormDialog>
         </CardContent>
       </Card>
     </div>

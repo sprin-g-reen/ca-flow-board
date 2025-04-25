@@ -16,6 +16,13 @@ interface UIState {
     assignedTo?: string[];
     dueDate?: string;
   };
+  modals: {
+    addClient: boolean;
+    addEmployee: boolean;
+    addTask: boolean;
+    addInvoice: boolean;
+    addEvent: boolean;
+  }
 }
 
 const initialState: UIState = {
@@ -24,6 +31,13 @@ const initialState: UIState = {
   theme: 'light',
   notificationsUnread: 3,
   activeFilters: {},
+  modals: {
+    addClient: false,
+    addEmployee: false,
+    addTask: false,
+    addInvoice: false,
+    addEvent: false
+  }
 };
 
 const uiSlice = createSlice({
@@ -54,6 +68,13 @@ const uiSlice = createSlice({
     incrementUnreadNotifications: (state, action: PayloadAction<number>) => {
       state.notificationsUnread += action.payload;
     },
+    toggleModal: (
+      state,
+      action: PayloadAction<{modal: keyof UIState['modals']; value?: boolean}>
+    ) => {
+      const { modal, value } = action.payload;
+      state.modals[modal] = value !== undefined ? value : !state.modals[modal];
+    }
   },
 });
 
@@ -65,6 +86,7 @@ export const {
   clearFilters,
   setNotificationsRead,
   incrementUnreadNotifications,
+  toggleModal
 } = uiSlice.actions;
 
 export default uiSlice.reducer;

@@ -1,9 +1,11 @@
 
 import { useState } from 'react';
+import { useSelector, useDispatch } from 'react-redux';
 import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
+import { RootState } from '@/store';
 import {
   Select,
   SelectContent,
@@ -11,10 +13,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { FormDialog } from '@/components/shared/FormDialog';
+import { AddEventForm } from '@/components/forms/AddEventForm';
+import { toggleModal } from '@/store/slices/uiSlice';
 
 const OwnerCalendar = () => {
+  const dispatch = useDispatch();
   const [date, setDate] = useState<Date | undefined>(new Date());
   const [view, setView] = useState<string>('month');
+  const { modals } = useSelector((state: RootState) => state.ui);
   
   // Mock calendar events
   const events = [
@@ -49,6 +56,14 @@ const OwnerCalendar = () => {
     }
   };
 
+  const handleOpenAddEventModal = () => {
+    dispatch(toggleModal({ modal: 'addEvent', value: true }));
+  };
+  
+  const handleCloseAddEventModal = () => {
+    dispatch(toggleModal({ modal: 'addEvent', value: false }));
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -64,7 +79,10 @@ const OwnerCalendar = () => {
               <SelectItem value="month">Month</SelectItem>
             </SelectContent>
           </Select>
-          <Button className="bg-ca-blue hover:bg-ca-blue-dark">
+          <Button 
+            className="bg-ca-blue hover:bg-ca-blue-dark"
+            onClick={handleOpenAddEventModal}
+          >
             <Plus className="mr-2 h-4 w-4" />
             Add Event
           </Button>
@@ -105,6 +123,16 @@ const OwnerCalendar = () => {
           </CardContent>
         </Card>
       </div>
+      
+      <FormDialog
+        open={modals.addEvent}
+        onOpenChange={handleCloseAddEventModal}
+        title="Add New Event"
+        description="Schedule a new event in your calendar"
+        showFooter={false}
+      >
+        <AddEventForm onSuccess={handleCloseAddEventModal} />
+      </FormDialog>
     </div>
   );
 };
