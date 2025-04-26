@@ -37,7 +37,9 @@ const AdminEmployees = () => {
         title="Add New Employee"
         description="Create a new employee account"
       >
-        {/* AddEmployeeForm component will be rendered here */}
+        <div className="text-center py-4 text-muted-foreground">
+          Employee form would go here
+        </div>
       </FormDialog>
     </div>
   );

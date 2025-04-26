@@ -1,3 +1,4 @@
+
 import { Provider } from 'react-redux';
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -21,6 +22,7 @@ import OwnerSettings from './pages/owner/OwnerSettings';
 
 // Admin routes
 import AdminDashboard from './pages/admin/AdminDashboard';
+import AdminTasks from './pages/admin/AdminTasks';
 import AdminEmployees from './pages/admin/AdminEmployees';
 import AdminTemplates from './pages/admin/AdminTemplates';
 import AdminInvoices from './pages/admin/AdminInvoices';
