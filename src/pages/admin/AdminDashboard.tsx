@@ -95,16 +95,17 @@ const AdminDashboard = () => {
   // State to manage widgets
   const [widgets, setWidgets] = useState(initialWidgets);
   
-  // Function to move widgets (required by DashboardWidget)
+  // Function to move widgets
   const moveWidget = (dragIndex: number, hoverIndex: number) => {
-    // Create a copy of the widgets array
     const newWidgets = [...widgets];
-    // Remove the widget at dragIndex
     const draggedWidget = newWidgets.splice(dragIndex, 1)[0];
-    // Insert it at the hoverIndex
     newWidgets.splice(hoverIndex, 0, draggedWidget);
-    // Update state
     setWidgets(newWidgets);
+  };
+  
+  // Function to remove a widget
+  const handleRemoveWidget = (widgetId: string) => {
+    setWidgets(widgets.filter(widget => widget.id !== widgetId));
   };
   
   // Function to add a new widget
@@ -223,6 +224,7 @@ const AdminDashboard = () => {
                   id={widget.id}
                   index={index}
                   moveWidget={moveWidget}
+                  onRemove={handleRemoveWidget}
                 >
                   {widget.content}
                 </DashboardWidget>
