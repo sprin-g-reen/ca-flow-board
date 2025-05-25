@@ -21,6 +21,7 @@ interface FormDialogProps {
   submitLabel?: string;
   cancelLabel?: string;
   showFooter?: boolean;
+  className?: string;
 }
 
 export function FormDialog({
@@ -33,11 +34,12 @@ export function FormDialog({
   isSubmitting = false,
   submitLabel = "Save",
   cancelLabel = "Cancel",
-  showFooter = true
+  showFooter = true,
+  className
 }: FormDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className={className}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           {description && <DialogDescription>{description}</DialogDescription>}
