@@ -30,25 +30,13 @@ import {
 import { FormDialog } from '@/components/shared/FormDialog';
 import { AddEmployeeForm } from '@/components/forms/AddEmployeeForm';
 import { toggleModal } from '@/store/slices/uiSlice';
+import { useEmployees } from '@/hooks/useEmployees';
 
 const OwnerEmployees = () => {
   const dispatch = useDispatch();
   const { modals } = useSelector((state: RootState) => state.ui);
+  const { employees, isLoading } = useEmployees();
   
-  // In a real app, this would come from the API
-  const employees = [
-    { id: 301, name: 'Jane Smith', role: 'Senior Accountant', email: 'jane@example.com', phone: '+91 98765 43210', status: 'active' },
-    { id: 302, name: 'Mike Brown', role: 'GST Specialist', email: 'mike@example.com', phone: '+91 87654 32109', status: 'active' },
-    { id: 303, name: 'Sara Williams', role: 'Auditor', email: 'sara@example.com', phone: '+91 76543 21098', status: 'active' },
-    { id: 304, name: 'Alex Johnson', role: 'Junior Accountant', email: 'alex@example.com', phone: '+91 65432 10987', status: 'inactive' },
-    { id: 305, name: 'Priya Sharma', role: 'Tax Consultant', email: 'priya@example.com', phone: '+91 54321 09876', status: 'active' },
-  ];
-
-  const admins = [
-    { id: 201, name: 'David Wilson', role: 'Super Admin', email: 'david@example.com', phone: '+91 98765 12345', status: 'active' },
-    { id: 202, name: 'Lisa Chen', role: 'Super Admin', email: 'lisa@example.com', phone: '+91 87654 23456', status: 'active' },
-  ];
-
   const [activeTab, setActiveTab] = useState('employees');
 
   const handleOpenAddEmployeeModal = () => {
@@ -58,6 +46,18 @@ const OwnerEmployees = () => {
   const handleCloseAddEmployeeModal = () => {
     dispatch(toggleModal({ modal: 'addEmployee', value: false }));
   };
+
+  if (isLoading) {
+    return (
+      <div className="p-6 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-ca-blue"></div>
+      </div>
+    );
+  }
+
+  // Filter employees and admins
+  const employeeList = employees.filter(emp => emp.profiles?.role === 'employee');
+  const adminList = employees.filter(emp => emp.profiles?.role === 'superadmin');
 
   return (
     <div className="p-6 space-y-6">
@@ -98,29 +98,29 @@ const OwnerEmployees = () => {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Employee</TableHead>
-                    <TableHead>Role</TableHead>
+                    <TableHead>Position</TableHead>
                     <TableHead>Email</TableHead>
-                    <TableHead>Phone</TableHead>
+                    <TableHead>Department</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {employees.map((employee) => (
+                  {employeeList.map((employee) => (
                     <TableRow key={employee.id}>
                       <TableCell>
                         <div className="flex items-center gap-3">
                           <Avatar className="h-8 w-8">
                             <AvatarFallback className="bg-ca-blue text-white">
-                              {employee.name.split(' ').map(n => n[0]).join('')}
+                              {employee.profiles?.full_name?.split(' ').map(n => n[0]).join('') || 'E'}
                             </AvatarFallback>
                           </Avatar>
-                          <span className="font-medium">{employee.name}</span>
+                          <span className="font-medium">{employee.profiles?.full_name || 'Unknown'}</span>
                         </div>
                       </TableCell>
-                      <TableCell>{employee.role}</TableCell>
-                      <TableCell>{employee.email}</TableCell>
-                      <TableCell>{employee.phone}</TableCell>
+                      <TableCell>{employee.position || 'Not assigned'}</TableCell>
+                      <TableCell>{employee.profiles?.email}</TableCell>
+                      <TableCell>{employee.department || 'General'}</TableCell>
                       <TableCell>
                         <span className={`px-2 py-1 rounded-full text-xs ${
                           employee.status === 'active' 
@@ -136,6 +136,13 @@ const OwnerEmployees = () => {
                       </TableCell>
                     </TableRow>
                   ))}
+                  {employeeList.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-4 text-muted-foreground">
+                        No employees found
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </TabsContent>
@@ -147,27 +154,27 @@ const OwnerEmployees = () => {
                     <TableHead>Admin</TableHead>
                     <TableHead>Role</TableHead>
                     <TableHead>Email</TableHead>
-                    <TableHead>Phone</TableHead>
+                    <TableHead>Department</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {admins.map((admin) => (
+                  {adminList.map((admin) => (
                     <TableRow key={admin.id}>
                       <TableCell>
                         <div className="flex items-center gap-3">
                           <Avatar className="h-8 w-8">
                             <AvatarFallback className="bg-ca-blue-dark text-white">
-                              {admin.name.split(' ').map(n => n[0]).join('')}
+                              {admin.profiles?.full_name?.split(' ').map(n => n[0]).join('') || 'A'}
                             </AvatarFallback>
                           </Avatar>
-                          <span className="font-medium">{admin.name}</span>
+                          <span className="font-medium">{admin.profiles?.full_name || 'Unknown'}</span>
                         </div>
                       </TableCell>
-                      <TableCell>{admin.role}</TableCell>
-                      <TableCell>{admin.email}</TableCell>
-                      <TableCell>{admin.phone}</TableCell>
+                      <TableCell>{admin.profiles?.role}</TableCell>
+                      <TableCell>{admin.profiles?.email}</TableCell>
+                      <TableCell>{admin.department || 'Administration'}</TableCell>
                       <TableCell>
                         <span className={`px-2 py-1 rounded-full text-xs ${
                           admin.status === 'active' 
@@ -183,6 +190,13 @@ const OwnerEmployees = () => {
                       </TableCell>
                     </TableRow>
                   ))}
+                  {adminList.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-4 text-muted-foreground">
+                        No administrators found
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </TabsContent>

@@ -29,33 +29,8 @@ interface Task {
   quotation_sent?: boolean;
   payment_status?: 'pending' | 'paid' | 'failed';
   quotation_number?: string;
+  is_deleted?: boolean;
 }
-
-// Mock data for fallback
-const mockTasks: Task[] = [
-  {
-    id: '1',
-    title: 'GST Return Filing - ABC Corp',
-    description: 'File monthly GST return for ABC Corporation',
-    status: 'todo',
-    priority: 'high',
-    category: 'gst',
-    client_name: 'ABC Corporation',
-    due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: '2',
-    title: 'ITR Filing - John Doe',
-    description: 'Individual tax return filing',
-    status: 'inprogress',
-    priority: 'medium',
-    category: 'itr',
-    client_name: 'John Doe',
-    due_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
-    created_at: new Date().toISOString(),
-  },
-];
 
 export const useTasks = () => {
   const queryClient = useQueryClient();
@@ -72,17 +47,13 @@ export const useTasks = () => {
 
         if (error) {
           console.error('Error fetching tasks:', error);
-          // If table doesn't exist, return mock data
-          if (error.code === '42P01') {
-            return mockTasks;
-          }
           throw error;
         }
 
         return data || [];
       } catch (err) {
         console.error('Tasks fetch error:', err);
-        return mockTasks;
+        return [];
       }
     },
   });
