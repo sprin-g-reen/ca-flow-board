@@ -1,12 +1,18 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { useSelector } from 'react-redux';
-import { RootState } from '@/store';
 import TaskBoard from '@/components/tasks/TaskBoard';
+import { useTasks } from '@/hooks/useTasks';
 
 const EmployeeTasks = () => {
-  // In a real app, you would filter tasks by the current user's ID
-  const { tasks } = useSelector((state: RootState) => state.tasks);
+  const { tasks, isLoading } = useTasks();
+  
+  if (isLoading) {
+    return (
+      <div className="p-6 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-ca-blue"></div>
+      </div>
+    );
+  }
   
   return (
     <div className="p-6 space-y-6">

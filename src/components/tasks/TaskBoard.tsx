@@ -5,11 +5,12 @@ import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { ListFilter, Plus } from 'lucide-react';
 import { RootState } from '@/store';
-import { Task, TaskStatus, updateTaskStatus } from '@/store/slices/tasksSlice';
+import { Task, TaskStatus } from '@/store/slices/tasksSlice';
 import { Button } from '@/components/ui/button';
 import TaskColumn from './TaskColumn';
 import { setBoardView } from '@/store/slices/uiSlice';
 import TaskFilters from './TaskFilters';
+import { useTasks } from '@/hooks/useTasks';
 
 interface TaskBoardProps {
   tasks: Task[];
@@ -20,6 +21,7 @@ const TaskBoard = ({ tasks, basePath }: TaskBoardProps) => {
   const dispatch = useDispatch();
   const { boardView, activeFilters } = useSelector((state: RootState) => state.ui);
   const [showFilters, setShowFilters] = useState(false);
+  const { updateTaskStatus } = useTasks();
   
   // Define the columns and their order
   const columns: { title: string; status: TaskStatus }[] = [
@@ -86,7 +88,7 @@ const TaskBoard = ({ tasks, basePath }: TaskBoardProps) => {
 
   // Handle task drop between columns
   const handleTaskMove = (taskId: string, newStatus: TaskStatus) => {
-    dispatch(updateTaskStatus({ taskId, status: newStatus }));
+    updateTaskStatus({ taskId, status: newStatus });
   };
 
   return (

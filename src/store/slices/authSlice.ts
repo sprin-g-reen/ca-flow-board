@@ -3,56 +3,48 @@ import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
 export type UserRole = 'owner' | 'superadmin' | 'employee' | 'client';
 
-interface UserState {
-  id: string | null;
-  name: string | null;
-  email: string | null;
-  role: UserRole | null;
-  isAuthenticated: boolean;
-  token: string | null;
+export interface User {
+  id: string;
+  email: string;
+  full_name?: string;
+  role: UserRole;
 }
 
-const initialState: UserState = {
-  id: null,
-  name: null,
-  email: null,
-  role: null,
+interface AuthState {
+  user: User | null;
+  isAuthenticated: boolean;
+  role: UserRole | null;
+  loading: boolean;
+}
+
+const initialState: AuthState = {
+  user: null,
   isAuthenticated: false,
-  token: null,
+  role: null,
+  loading: true,
 };
 
 const authSlice = createSlice({
   name: 'auth',
   initialState,
   reducers: {
-    setCredentials: (
-      state,
-      action: PayloadAction<{
-        id: string;
-        name: string;
-        email: string;
-        role: UserRole;
-        token: string;
-      }>
-    ) => {
-      const { id, name, email, role, token } = action.payload;
-      state.id = id;
-      state.name = name;
-      state.email = email;
-      state.role = role;
-      state.token = token;
-      state.isAuthenticated = true;
+    setUser: (state, action: PayloadAction<User | null>) => {
+      state.user = action.payload;
+      state.isAuthenticated = !!action.payload;
+      state.role = action.payload?.role || null;
+      state.loading = false;
+    },
+    setLoading: (state, action: PayloadAction<boolean>) => {
+      state.loading = action.payload;
     },
     logout: (state) => {
-      state.id = null;
-      state.name = null;
-      state.email = null;
-      state.role = null;
-      state.token = null;
+      state.user = null;
       state.isAuthenticated = false;
+      state.role = null;
+      state.loading = false;
     },
   },
 });
 
-export const { setCredentials, logout } = authSlice.actions;
+export const { setUser, setLoading, logout } = authSlice.actions;
 export default authSlice.reducer;
