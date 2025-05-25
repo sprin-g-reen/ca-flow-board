@@ -26,7 +26,7 @@ export function useAuth() {
         setUser(session?.user ?? null);
         
         if (session?.user) {
-          // Fetch user profile
+          // Fetch user profile with error handling
           setTimeout(async () => {
             try {
               const { data: profileData, error } = await supabase
@@ -37,6 +37,16 @@ export function useAuth() {
               
               if (error) {
                 console.error('Error fetching profile:', error);
+                // If profiles table doesn't exist yet, create a mock profile
+                if (error.code === '42P01') {
+                  setProfile({
+                    id: session.user.id,
+                    email: session.user.email!,
+                    full_name: session.user.user_metadata?.full_name || null,
+                    role: session.user.email === 'rohith@springreen.in' ? 'owner' : 'employee',
+                    created_at: new Date().toISOString(),
+                  });
+                }
               } else {
                 setProfile(profileData);
               }

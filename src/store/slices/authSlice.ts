@@ -15,6 +15,7 @@ interface AuthState {
   isAuthenticated: boolean;
   role: UserRole | null;
   loading: boolean;
+  name?: string; // Add name property for compatibility
 }
 
 const initialState: AuthState = {
@@ -22,6 +23,7 @@ const initialState: AuthState = {
   isAuthenticated: false,
   role: null,
   loading: true,
+  name: undefined,
 };
 
 const authSlice = createSlice({
@@ -32,6 +34,21 @@ const authSlice = createSlice({
       state.user = action.payload;
       state.isAuthenticated = !!action.payload;
       state.role = action.payload?.role || null;
+      state.name = action.payload?.full_name || action.payload?.email || undefined;
+      state.loading = false;
+    },
+    setCredentials: (state, action: PayloadAction<{
+      id: string;
+      name: string;
+      email: string;
+      role: UserRole;
+      token: string;
+    }>) => {
+      const { id, name, email, role } = action.payload;
+      state.user = { id, email, full_name: name, role };
+      state.isAuthenticated = true;
+      state.role = role;
+      state.name = name;
       state.loading = false;
     },
     setLoading: (state, action: PayloadAction<boolean>) => {
@@ -41,10 +58,11 @@ const authSlice = createSlice({
       state.user = null;
       state.isAuthenticated = false;
       state.role = null;
+      state.name = undefined;
       state.loading = false;
     },
   },
 });
 
-export const { setUser, setLoading, logout } = authSlice.actions;
+export const { setUser, setCredentials, setLoading, logout } = authSlice.actions;
 export default authSlice.reducer;
