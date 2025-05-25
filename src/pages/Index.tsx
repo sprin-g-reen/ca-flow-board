@@ -1,44 +1,32 @@
 
-import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { RootState } from '@/store';
+import { Navigate } from 'react-router-dom';
+import { UserRole } from '@/store/slices/authSlice';
 
-// This is just a redirect page to the login page or appropriate dashboard
 const Index = () => {
-  const navigate = useNavigate();
   const { isAuthenticated, role } = useSelector((state: RootState) => state.auth);
 
-  useEffect(() => {
-    if (isAuthenticated) {
-      switch (role) {
-        case 'owner':
-          navigate('/owner/dashboard');
-          break;
-        case 'superadmin':
-          navigate('/admin/dashboard');
-          break;
-        case 'employee':
-          navigate('/employee/dashboard');
-          break;
-        case 'client':
-          navigate('/client/dashboard');
-          break;
-        default:
-          navigate('/login');
-      }
-    } else {
-      navigate('/login');
-    }
-  }, [isAuthenticated, role, navigate]);
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
 
-  return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="text-center">
-        <h1 className="text-2xl font-bold">Loading...</h1>
-      </div>
-    </div>
-  );
+  const redirectBasedOnRole = (role: UserRole) => {
+    switch (role) {
+      case 'owner':
+        return '/owner/dashboard';
+      case 'superadmin':
+        return '/admin/dashboard';
+      case 'employee':
+        return '/employee/dashboard';
+      case 'client':
+        return '/client/dashboard';
+      default:
+        return '/login';
+    }
+  };
+
+  return <Navigate to={redirectBasedOnRole(role!)} replace />;
 };
 
 export default Index;

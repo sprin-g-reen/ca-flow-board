@@ -14,11 +14,15 @@ export interface User {
 export interface UserState {
   user: User | null;
   isAuthenticated: boolean;
+  name: string | null;
+  role: UserRole | null;
 }
 
 const initialState: UserState = {
   user: null,
   isAuthenticated: false,
+  name: null,
+  role: null,
 };
 
 const authSlice = createSlice({
@@ -27,10 +31,14 @@ const authSlice = createSlice({
   reducers: {
     setCredentials: (state, action: PayloadAction<User>) => {
       state.user = action.payload;
+      state.name = action.payload.name;
+      state.role = action.payload.role;
       state.isAuthenticated = true;
     },
     logout: (state) => {
       state.user = null;
+      state.name = null;
+      state.role = null;
       state.isAuthenticated = false;
     },
   },

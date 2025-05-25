@@ -1,4 +1,3 @@
-
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
 export type TaskStatus = 'todo' | 'inprogress' | 'review' | 'completed';
@@ -12,7 +11,7 @@ export interface TaskTemplate {
   category: TaskCategory;
   isRecurring: boolean;
   recurrencePattern?: 'monthly' | 'yearly' | 'custom';
-  deadline?: string; // For custom deadlines
+  deadline?: string;
   subtasks: SubTask[];
   price?: number;
   isPayableTask: boolean;
@@ -25,10 +24,11 @@ export interface TaskTemplate {
 export interface SubTask {
   id: string;
   title: string;
-  description: string;
+  description?: string;
   dueDate?: string;
-  isCompleted: boolean;
-  order: number;
+  isCompleted?: boolean;
+  completed?: boolean;
+  order?: number;
 }
 
 export interface Task {

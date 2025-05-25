@@ -4,7 +4,7 @@ import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { ListFilter, Plus } from 'lucide-react';
 import { RootState } from '@/store';
-import { Task, TaskStatus } from '@/store/slices/tasksSlice';
+import { Task, TaskStatus, SubTask } from '@/store/slices/tasksSlice';
 import { Button } from '@/components/ui/button';
 import TaskColumn from './TaskColumn';
 import { setBoardView } from '@/store/slices/uiSlice';
@@ -13,12 +13,6 @@ import { CreateTaskDialog } from './CreateTaskDialog';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useDispatch } from 'react-redux';
-
-interface SubTask {
-  id: string;
-  title: string;
-  completed: boolean;
-}
 
 interface TaskBoardProps {
   basePath: string;
@@ -60,9 +54,26 @@ const TaskBoard = ({ basePath }: TaskBoardProps) => {
         let subtasks: SubTask[] = [];
         try {
           if (task.subtasks && typeof task.subtasks === 'string') {
-            subtasks = JSON.parse(task.subtasks);
+            const parsed = JSON.parse(task.subtasks);
+            subtasks = Array.isArray(parsed) ? parsed.map((st: any) => ({
+              id: st.id || '',
+              title: st.title || '',
+              description: st.description || '',
+              dueDate: st.dueDate,
+              isCompleted: st.isCompleted || st.completed || false,
+              completed: st.completed || st.isCompleted || false,
+              order: st.order || 0,
+            })) : [];
           } else if (Array.isArray(task.subtasks)) {
-            subtasks = task.subtasks as SubTask[];
+            subtasks = (task.subtasks as any[]).map((st: any) => ({
+              id: st.id || '',
+              title: st.title || '',
+              description: st.description || '',
+              dueDate: st.dueDate,
+              isCompleted: st.isCompleted || st.completed || false,
+              completed: st.completed || st.isCompleted || false,
+              order: st.order || 0,
+            }));
           }
         } catch (e) {
           console.warn('Failed to parse subtasks:', e);
