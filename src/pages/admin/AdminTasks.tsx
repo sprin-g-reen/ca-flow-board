@@ -2,15 +2,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
-import { useSelector } from 'react-redux';
-import { RootState } from '@/store';
 import TaskBoard from '@/components/tasks/TaskBoard';
 import { FormDialog } from '@/components/shared/FormDialog';
 import { AddTaskForm } from '@/components/forms/AddTaskForm';
 import { useState } from "react";
 
 const AdminTasks = () => {
-  const { tasks } = useSelector((state: RootState) => state.tasks);
   const [showAddTask, setShowAddTask] = useState(false);
   
   return (
@@ -34,7 +31,7 @@ const AdminTasks = () => {
           </p>
         </CardHeader>
         <CardContent>
-          <TaskBoard tasks={tasks} basePath="/admin" />
+          <TaskBoard basePath="/admin" />
         </CardContent>
       </Card>
       

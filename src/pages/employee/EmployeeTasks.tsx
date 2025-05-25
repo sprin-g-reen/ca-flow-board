@@ -1,13 +1,8 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { useSelector } from 'react-redux';
-import { RootState } from '@/store';
 import TaskBoard from '@/components/tasks/TaskBoard';
 
 const EmployeeTasks = () => {
-  // In a real app, you would filter tasks by the current user's ID
-  const { tasks } = useSelector((state: RootState) => state.tasks);
-  
   return (
     <div className="p-6 space-y-6">
       <Card>
@@ -18,7 +13,7 @@ const EmployeeTasks = () => {
           </p>
         </CardHeader>
         <CardContent>
-          <TaskBoard tasks={tasks} basePath="/employee" />
+          <TaskBoard basePath="/employee" />
         </CardContent>
       </Card>
     </div>

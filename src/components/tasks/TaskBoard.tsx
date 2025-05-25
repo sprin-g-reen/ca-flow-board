@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import { DndProvider } from 'react-dnd';
@@ -14,6 +13,12 @@ import { CreateTaskDialog } from './CreateTaskDialog';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useDispatch } from 'react-redux';
+
+interface SubTask {
+  id: string;
+  title: string;
+  completed: boolean;
+}
 
 interface TaskBoardProps {
   basePath: string;
@@ -50,32 +55,47 @@ const TaskBoard = ({ basePath }: TaskBoardProps) => {
 
       if (error) throw error;
 
-      const formattedTasks: Task[] = (data || []).map(task => ({
-        id: task.id,
-        title: task.title,
-        description: task.description || '',
-        status: task.status as TaskStatus,
-        priority: task.priority as any,
-        category: task.category as any,
-        clientId: task.client_id || '',
-        clientName: task.client_name || '',
-        assignedTo: task.assigned_to || [],
-        createdBy: task.created_by || '',
-        createdAt: task.created_at || '',
-        dueDate: task.due_date || '',
-        completedAt: task.completed_at,
-        isTemplate: task.is_template || false,
-        templateId: task.template_id,
-        isRecurring: task.is_recurring || false,
-        recurrencePattern: task.recurrence_pattern,
-        subtasks: task.subtasks || [],
-        price: task.price,
-        isPayableTask: task.is_payable_task || false,
-        payableTaskType: task.payable_task_type as any,
-        quotationSent: task.quotation_sent || false,
-        paymentStatus: task.payment_status as any,
-        quotationNumber: task.quotation_number,
-      }));
+      const formattedTasks: Task[] = (data || []).map(task => {
+        // Parse subtasks safely
+        let subtasks: SubTask[] = [];
+        try {
+          if (task.subtasks && typeof task.subtasks === 'string') {
+            subtasks = JSON.parse(task.subtasks);
+          } else if (Array.isArray(task.subtasks)) {
+            subtasks = task.subtasks as SubTask[];
+          }
+        } catch (e) {
+          console.warn('Failed to parse subtasks:', e);
+          subtasks = [];
+        }
+
+        return {
+          id: task.id,
+          title: task.title,
+          description: task.description || '',
+          status: task.status as TaskStatus,
+          priority: task.priority as 'low' | 'medium' | 'high' | 'urgent',
+          category: task.category as 'gst_filing' | 'itr_filing' | 'roc_filing' | 'other',
+          clientId: task.client_id || '',
+          clientName: task.client_name || '',
+          assignedTo: task.assigned_to || [],
+          createdBy: task.created_by || '',
+          createdAt: task.created_at || '',
+          dueDate: task.due_date || '',
+          completedAt: task.completed_at,
+          isTemplate: task.is_template || false,
+          templateId: task.template_id,
+          isRecurring: task.is_recurring || false,
+          recurrencePattern: task.recurrence_pattern,
+          subtasks: subtasks,
+          price: task.price,
+          isPayableTask: task.is_payable_task || false,
+          payableTaskType: task.payable_task_type as 'payable_task_1' | 'payable_task_2' | undefined,
+          quotationSent: task.quotation_sent || false,
+          paymentStatus: task.payment_status as 'pending' | 'paid' | 'failed' | undefined,
+          quotationNumber: task.quotation_number,
+        };
+      });
 
       setTasks(formattedTasks);
     } catch (error) {
