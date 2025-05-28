@@ -28,7 +28,9 @@ export const useEmployees = () => {
     queryKey: ['employees'],
     queryFn: async () => {
       try {
-        const { data, error } = await (supabase as any)
+        console.log('Fetching employees from database...');
+        
+        const { data, error } = await supabase
           .from('employees')
           .select(`
             *,
@@ -46,10 +48,11 @@ export const useEmployees = () => {
           throw error;
         }
 
+        console.log('Fetched employees:', data);
         return data || [];
       } catch (err) {
         console.error('Employees fetch error:', err);
-        return [];
+        throw err;
       }
     },
   });
@@ -57,7 +60,9 @@ export const useEmployees = () => {
   const addEmployee = useMutation({
     mutationFn: async (employeeData: Partial<Employee>) => {
       try {
-        const { data, error } = await (supabase as any)
+        console.log('Adding employee to database:', employeeData);
+        
+        const { data, error } = await supabase
           .from('employees')
           .insert([employeeData])
           .select()
@@ -68,6 +73,7 @@ export const useEmployees = () => {
           throw error;
         }
 
+        console.log('Employee added successfully:', data);
         return data;
       } catch (err) {
         console.error('Employee add error:', err);
@@ -75,6 +81,7 @@ export const useEmployees = () => {
       }
     },
     onSuccess: () => {
+      console.log('Invalidating employees query...');
       queryClient.invalidateQueries({ queryKey: ['employees'] });
     },
   });
