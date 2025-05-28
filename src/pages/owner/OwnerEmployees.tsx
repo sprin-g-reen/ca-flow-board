@@ -1,8 +1,6 @@
 
 import { useState } from 'react';
-import { useSelector, useDispatch } from 'react-redux';
-import { RootState } from '@/store';
-import { PlusSquare, Search, UserPlus, AlertCircle } from 'lucide-react';
+import { PlusSquare, Search, UserPlus, AlertCircle, Download, Upload } from 'lucide-react';
 import {
   Card,
   CardContent,
@@ -30,23 +28,56 @@ import {
 } from "@/components/ui/tabs";
 import { FormDialog } from '@/components/shared/FormDialog';
 import { AddEmployeeForm } from '@/components/forms/AddEmployeeForm';
-import { toggleModal } from '@/store/slices/uiSlice';
 import { useEmployees } from '@/hooks/useEmployees';
+import { toast } from 'sonner';
 
 const OwnerEmployees = () => {
-  const dispatch = useDispatch();
-  const { modals } = useSelector((state: RootState) => state.ui);
+  const [showAddEmployee, setShowAddEmployee] = useState(false);
   const { employees, isLoading, error } = useEmployees();
   
   const [activeTab, setActiveTab] = useState('employees');
   const [searchQuery, setSearchQuery] = useState('');
 
   const handleOpenAddEmployeeModal = () => {
-    dispatch(toggleModal({ modal: 'addEmployee', value: true }));
+    setShowAddEmployee(true);
   };
   
   const handleCloseAddEmployeeModal = () => {
-    dispatch(toggleModal({ modal: 'addEmployee', value: false }));
+    setShowAddEmployee(false);
+  };
+
+  const handleExportEmployees = () => {
+    try {
+      const exportData = employees.map(emp => ({
+        employee_id: emp.employee_id,
+        name: emp.profiles?.full_name || 'No name set',
+        email: emp.profiles?.email || 'No email',
+        role: emp.profiles?.role || 'employee',
+        position: emp.position || 'Not assigned',
+        department: emp.department || 'General',
+        status: emp.status,
+        created_at: emp.created_at,
+      }));
+
+      const csvContent = [
+        Object.keys(exportData[0] || {}).join(','),
+        ...exportData.map(row => Object.values(row).join(','))
+      ].join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `employees-export-${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      toast.success('Employees exported successfully');
+    } catch (error) {
+      toast.error('Failed to export employees');
+    }
   };
 
   if (isLoading) {
@@ -69,10 +100,11 @@ const OwnerEmployees = () => {
     );
   }
 
-  // Filter employees and admins
+  // Filter employees and admins based on their role in profiles table
   const employeeList = employees.filter((emp: any) => 
-    emp.profiles?.role === 'employee' || !emp.profiles?.role
+    !emp.profiles?.role || emp.profiles.role === 'employee'
   );
+  
   const adminList = employees.filter((emp: any) => 
     emp.profiles?.role === 'superadmin'
   );
@@ -122,13 +154,23 @@ const OwnerEmployees = () => {
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
-              <Button 
-                className="bg-ca-blue hover:bg-ca-blue-dark"
-                onClick={handleOpenAddEmployeeModal}
-              >
-                <UserPlus className="mr-2 h-4 w-4" />
-                Add {activeTab === "employees" ? "Employee" : "Admin"}
-              </Button>
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline"
+                  onClick={handleExportEmployees}
+                  disabled={employees.length === 0}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Export
+                </Button>
+                <Button 
+                  className="bg-ca-blue hover:bg-ca-blue-dark"
+                  onClick={handleOpenAddEmployeeModal}
+                >
+                  <UserPlus className="mr-2 h-4 w-4" />
+                  Add {activeTab === "employees" ? "Employee" : "Admin"}
+                </Button>
+              </div>
             </div>
 
             <TabsContent value="employees">
@@ -303,7 +345,7 @@ const OwnerEmployees = () => {
           </Tabs>
           
           <FormDialog
-            open={modals.addEmployee}
+            open={showAddEmployee}
             onOpenChange={handleCloseAddEmployeeModal}
             title={`Add New ${activeTab === "employees" ? "Employee" : "Administrator"}`}
             description={`Create a new ${activeTab === "employees" ? "employee" : "administrator"} record for your firm`}

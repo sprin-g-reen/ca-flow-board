@@ -8,60 +8,100 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
+import { useClients } from '@/hooks/useClients';
+import { useEmployees } from '@/hooks/useEmployees';
+import { supabase } from '@/integrations/supabase/client';
 
 const formSchema = z.object({
   title: z.string().min(2, "Title must be at least 2 characters"),
-  description: z.string().min(5, "Description is required"),
-  priority: z.string(),
-  category: z.string(),
-  clientId: z.string(),
-  dueDate: z.string(),
+  description: z.string().optional(),
+  category: z.enum(['gst', 'itr', 'roc', 'other'], {
+    required_error: "Please select a category",
+  }),
+  priority: z.enum(['low', 'medium', 'high', 'urgent'], {
+    required_error: "Please select a priority",
+  }),
+  client_id: z.string().optional(),
+  assigned_to: z.array(z.string()).optional(),
+  due_date: z.string().optional(),
+  is_payable_task: z.boolean().default(false),
+  price: z.number().optional(),
+  payable_task_type: z.string().optional(),
 });
 
 export function AddTaskForm({ onSuccess }: { onSuccess: () => void }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { clients } = useClients();
+  const { employees } = useEmployees();
   
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       title: '',
       description: '',
+      category: 'other',
       priority: 'medium',
-      category: 'compliance',
-      clientId: '',
-      dueDate: '',
+      client_id: '',
+      assigned_to: [],
+      due_date: '',
+      is_payable_task: false,
+      price: undefined,
+      payable_task_type: '',
     },
   });
   
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
       setIsSubmitting(true);
-      // In a real app, this would be an API call
-      console.log('Creating task:', values);
+      console.log('Creating task with values:', values);
       
-      // Simulate API call
-      setTimeout(() => {
-        toast.success("Task created successfully");
-        setIsSubmitting(false);
-        form.reset();
-        onSuccess();
-      }, 1000);
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) {
+        throw new Error('User not authenticated');
+      }
+
+      const taskData = {
+        title: values.title,
+        description: values.description || '',
+        category: values.category,
+        priority: values.priority,
+        status: 'todo',
+        client_id: values.client_id || null,
+        assigned_to: values.assigned_to || [],
+        due_date: values.due_date ? new Date(values.due_date).toISOString() : null,
+        created_by: userData.user.id,
+        is_payable_task: values.is_payable_task,
+        price: values.price || null,
+        payable_task_type: values.payable_task_type || null,
+        is_deleted: false,
+      };
+
+      const { data, error } = await supabase
+        .from('tasks')
+        .insert(taskData)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating task:', error);
+        throw error;
+      }
+
+      console.log('Task created successfully:', data);
+      toast.success("Task created successfully");
+      form.reset();
+      onSuccess();
     } catch (error) {
       console.error('Error creating task:', error);
       toast.error("Failed to create task");
+    } finally {
       setIsSubmitting(false);
     }
   };
-  
-  // Sample clients data (in a real app, this would come from API/Redux)
-  const clients = [
-    { id: '101', name: 'ABC Corp' },
-    { id: '102', name: 'XYZ Industries' },
-    { id: '103', name: 'Smith & Co.' },
-    { id: '104', name: 'Johnson LLC' },
-    { id: '105', name: 'Patel Enterprises' },
-  ];
+
+  const isPayableTask = form.watch('is_payable_task');
   
   return (
     <Form {...form}>
@@ -87,18 +127,38 @@ export function AddTaskForm({ onSuccess }: { onSuccess: () => void }) {
             <FormItem>
               <FormLabel>Description</FormLabel>
               <FormControl>
-                <Textarea 
-                  placeholder="Enter task description" 
-                  className="min-h-20" 
-                  {...field} 
-                />
+                <Textarea placeholder="Enter task description" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="category"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Category</FormLabel>
+                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="gst">GST Filing</SelectItem>
+                    <SelectItem value="itr">ITR Filing</SelectItem>
+                    <SelectItem value="roc">ROC Filing</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
           <FormField
             control={form.control}
             name="priority"
@@ -122,71 +182,146 @@ export function AddTaskForm({ onSuccess }: { onSuccess: () => void }) {
               </FormItem>
             )}
           />
-          
-          <FormField
-            control={form.control}
-            name="category"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Category</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select category" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="gst">GST</SelectItem>
-                    <SelectItem value="tax">Tax</SelectItem>
-                    <SelectItem value="audit">Audit</SelectItem>
-                    <SelectItem value="compliance">Compliance</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
         </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="clientId"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Client</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select client" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {clients.map(client => (
-                      <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          
-          <FormField
-            control={form.control}
-            name="dueDate"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Due Date</FormLabel>
+
+        <FormField
+          control={form.control}
+          name="client_id"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Client (Optional)</FormLabel>
+              <Select onValueChange={field.onChange} defaultValue={field.value}>
                 <FormControl>
-                  <Input type="date" {...field} />
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select client" />
+                  </SelectTrigger>
                 </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
+                <SelectContent>
+                  {clients.map(client => (
+                    <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="assigned_to"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Assign To (Optional)</FormLabel>
+              <FormControl>
+                <div className="space-y-2 max-h-40 overflow-y-auto">
+                  {employees.map(employee => (
+                    <div key={employee.id} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={employee.id}
+                        checked={field.value?.includes(employee.id) || false}
+                        onCheckedChange={(checked) => {
+                          const currentValue = field.value || [];
+                          if (checked) {
+                            field.onChange([...currentValue, employee.id]);
+                          } else {
+                            field.onChange(currentValue.filter(id => id !== employee.id));
+                          }
+                        }}
+                      />
+                      <label htmlFor={employee.id} className="text-sm">
+                        {employee.profiles?.full_name || employee.employee_id}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="due_date"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Due Date (Optional)</FormLabel>
+              <FormControl>
+                <Input type="datetime-local" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="is_payable_task"
+          render={({ field }) => (
+            <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+              <FormControl>
+                <Checkbox
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                />
+              </FormControl>
+              <div className="space-y-1 leading-none">
+                <FormLabel>
+                  Payable Task
+                </FormLabel>
+                <p className="text-xs text-muted-foreground">
+                  This task requires payment from client
+                </p>
+              </div>
+            </FormItem>
+          )}
+        />
+
+        {isPayableTask && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FormField
+              control={form.control}
+              name="price"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Price (₹)</FormLabel>
+                  <FormControl>
+                    <Input 
+                      type="number" 
+                      placeholder="0.00"
+                      {...field}
+                      onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="payable_task_type"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Payment Type</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select payment type" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="payable_task_1">Account 1</SelectItem>
+                      <SelectItem value="payable_task_2">Account 2</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+        )}
         
         <div className="pt-4 space-x-2 flex justify-end">
           <Button 

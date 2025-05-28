@@ -32,6 +32,22 @@ interface Task {
   is_deleted?: boolean;
 }
 
+interface CreateTaskData {
+  title: string;
+  description?: string;
+  category: 'gst' | 'itr' | 'roc' | 'other';
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  status: 'todo' | 'inprogress' | 'review' | 'completed';
+  client_id?: string;
+  assigned_to?: string[];
+  due_date?: string;
+  created_by?: string;
+  is_payable_task?: boolean;
+  price?: number;
+  payable_task_type?: string;
+  is_deleted?: boolean;
+}
+
 export const useTasks = () => {
   const queryClient = useQueryClient();
 
@@ -39,9 +55,16 @@ export const useTasks = () => {
     queryKey: ['tasks'],
     queryFn: async () => {
       try {
-        const { data, error } = await (supabase as any)
+        console.log('Fetching tasks from database...');
+        
+        const { data, error } = await supabase
           .from('tasks')
-          .select('*')
+          .select(`
+            *,
+            clients (
+              name
+            )
+          `)
           .eq('is_deleted', false)
           .order('created_at', { ascending: false });
 
@@ -50,18 +73,57 @@ export const useTasks = () => {
           throw error;
         }
 
-        return data || [];
+        console.log('Fetched tasks:', data);
+        
+        // Transform the data to include client_name
+        const transformedTasks = data.map(task => ({
+          ...task,
+          client_name: task.clients?.name || null,
+        }));
+
+        return transformedTasks || [];
       } catch (err) {
         console.error('Tasks fetch error:', err);
-        return [];
+        throw err;
       }
+    },
+  });
+
+  const addTask = useMutation({
+    mutationFn: async (taskData: CreateTaskData) => {
+      try {
+        console.log('Adding task to database:', taskData);
+        
+        const { data, error } = await supabase
+          .from('tasks')
+          .insert(taskData)
+          .select()
+          .single();
+
+        if (error) {
+          console.error('Error adding task:', error);
+          throw error;
+        }
+
+        console.log('Task added successfully:', data);
+        return data;
+      } catch (err) {
+        console.error('Task add error:', err);
+        throw err;
+      }
+    },
+    onSuccess: () => {
+      console.log('Invalidating tasks query...');
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
     },
   });
 
   const updateTaskStatus = useMutation({
     mutationFn: async ({ taskId, status }: { taskId: string; status: string }) => {
       try {
-        const { data, error } = await (supabase as any)
+        console.log('Updating task status:', { taskId, status });
+        
+        const { data, error } = await supabase
           .from('tasks')
           .update({ 
             status,
@@ -77,6 +139,7 @@ export const useTasks = () => {
           throw error;
         }
 
+        console.log('Task updated successfully:', data);
         return data;
       } catch (err) {
         console.error('Task update error:', err);
@@ -92,6 +155,8 @@ export const useTasks = () => {
     tasks,
     isLoading,
     error,
+    addTask: addTask.mutate,
+    isAdding: addTask.isPending,
     updateTaskStatus: updateTaskStatus.mutate,
     isUpdating: updateTaskStatus.isPending,
   };
