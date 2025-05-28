@@ -21,6 +21,14 @@ interface Employee {
   };
 }
 
+interface CreateEmployeeData {
+  employee_id: string;
+  department?: string;
+  position?: string;
+  salary?: number | null;
+  status: 'active' | 'inactive' | 'terminated';
+}
+
 export const useEmployees = () => {
   const queryClient = useQueryClient();
 
@@ -58,13 +66,13 @@ export const useEmployees = () => {
   });
 
   const addEmployee = useMutation({
-    mutationFn: async (employeeData: Partial<Employee>) => {
+    mutationFn: async (employeeData: CreateEmployeeData) => {
       try {
         console.log('Adding employee to database:', employeeData);
         
         const { data, error } = await supabase
           .from('employees')
-          .insert([employeeData])
+          .insert(employeeData)
           .select()
           .single();
 
