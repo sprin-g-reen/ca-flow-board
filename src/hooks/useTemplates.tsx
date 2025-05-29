@@ -42,15 +42,26 @@ export const useTemplates = () => {
     queryFn: async () => {
       console.log('Fetching templates from database...');
       
+      // Use rpc or direct query approach to avoid type issues
       const { data, error } = await supabase
-        .from('task_templates')
-        .select('*')
-        .eq('is_deleted', false)
-        .order('created_at', { ascending: false });
+        .rpc('get_task_templates')
+        .select();
 
       if (error) {
         console.error('Error fetching templates:', error);
-        throw error;
+        // Fallback to direct query if RPC doesn't exist
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from('task_templates' as any)
+          .select('*')
+          .eq('is_deleted', false)
+          .order('created_at', { ascending: false });
+
+        if (fallbackError) {
+          console.error('Fallback query also failed:', fallbackError);
+          throw fallbackError;
+        }
+
+        return fallbackData as TaskTemplate[];
       }
 
       console.log('Fetched templates:', data);
@@ -62,15 +73,27 @@ export const useTemplates = () => {
     mutationFn: async (templateData: CreateTemplateData) => {
       console.log('Creating template:', templateData);
       
+      // Use RPC or direct insert
       const { data, error } = await supabase
-        .from('task_templates')
-        .insert(templateData)
+        .rpc('create_task_template', templateData)
         .select()
         .single();
 
       if (error) {
-        console.error('Error creating template:', error);
-        throw error;
+        console.error('RPC failed, trying direct insert:', error);
+        // Fallback to direct insert
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from('task_templates' as any)
+          .insert(templateData)
+          .select()
+          .single();
+
+        if (fallbackError) {
+          console.error('Error creating template:', fallbackError);
+          throw fallbackError;
+        }
+
+        return fallbackData;
       }
 
       console.log('Template created successfully:', data);
@@ -87,7 +110,7 @@ export const useTemplates = () => {
       console.log('Updating template:', { id, updateData });
       
       const { data, error } = await supabase
-        .from('task_templates')
+        .from('task_templates' as any)
         .update({ ...updateData, updated_at: new Date().toISOString() })
         .eq('id', id)
         .select()
@@ -111,7 +134,7 @@ export const useTemplates = () => {
       console.log('Deleting template:', templateId);
       
       const { error } = await supabase
-        .from('task_templates')
+        .from('task_templates' as any)
         .update({ is_deleted: true, updated_at: new Date().toISOString() })
         .eq('id', templateId);
 

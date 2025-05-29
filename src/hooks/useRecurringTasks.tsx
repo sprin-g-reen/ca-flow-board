@@ -27,22 +27,33 @@ export const useRecurringTasks = () => {
   const { data: schedules = [], isLoading } = useQuery({
     queryKey: ['recurring-schedules'],
     queryFn: async () => {
+      // Use RPC or fallback approach
       const { data, error } = await supabase
-        .from('recurring_task_schedule')
-        .select(`
-          *,
-          task_templates (
-            title,
-            category,
-            recurrence_pattern
-          )
-        `)
-        .eq('is_active', true)
-        .order('next_generation_date', { ascending: true });
+        .rpc('get_recurring_schedules')
+        .select();
 
       if (error) {
-        console.error('Error fetching recurring schedules:', error);
-        throw error;
+        console.error('RPC failed, trying direct query:', error);
+        // Fallback to direct query
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from('recurring_task_schedule' as any)
+          .select(`
+            *,
+            task_templates (
+              title,
+              category,
+              recurrence_pattern
+            )
+          `)
+          .eq('is_active', true)
+          .order('next_generation_date', { ascending: true });
+
+        if (fallbackError) {
+          console.error('Error fetching recurring schedules:', fallbackError);
+          throw fallbackError;
+        }
+
+        return fallbackData;
       }
 
       return data;
@@ -52,7 +63,7 @@ export const useRecurringTasks = () => {
   const createRecurringSchedule = useMutation({
     mutationFn: async (scheduleData: CreateRecurringScheduleData) => {
       const { data, error } = await supabase
-        .from('recurring_task_schedule')
+        .from('recurring_task_schedule' as any)
         .insert(scheduleData)
         .select()
         .single();
@@ -81,7 +92,7 @@ export const useRecurringTasks = () => {
       }
 
       console.log('Generated tasks:', data);
-      return data;
+      return data || [];
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });

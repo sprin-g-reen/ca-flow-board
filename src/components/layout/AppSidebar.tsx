@@ -1,3 +1,4 @@
+
 import { useSelector } from 'react-redux';
 import { NavLink } from 'react-router-dom';
 import { 
@@ -10,7 +11,7 @@ import {
   PieChart, 
   Settings, 
   Users,
-  Template
+  FileTemplate
 } from 'lucide-react';
 import { RootState } from '@/store';
 import { cn } from '@/lib/utils';
@@ -44,7 +45,7 @@ const ownerLinks = [
   { to: '/owner/clients', icon: <Users className="h-5 w-5" />, label: 'Clients' },
   { to: '/owner/employees', icon: <Users className="h-5 w-5" />, label: 'Employees' },
   { to: '/owner/tasks', icon: <ClipboardCheck className="h-5 w-5" />, label: 'Tasks' },
-  { to: '/owner/templates', icon: <Template className="h-5 w-5" />, label: 'Templates' },
+  { to: '/owner/templates', icon: <FileTemplate className="h-5 w-5" />, label: 'Templates' },
   { to: '/owner/invoices', icon: <FileText className="h-5 w-5" />, label: 'Invoices' },
   { to: '/owner/calendar', icon: <Calendar className="h-5 w-5" />, label: 'Calendar' },
   { to: '/owner/analytics', icon: <PieChart className="h-5 w-5" />, label: 'Analytics' },
@@ -55,7 +56,7 @@ const adminLinks = [
   { to: '/admin/dashboard', icon: <LayoutDashboard className="h-5 w-5" />, label: 'Dashboard', end: true },
   { to: '/admin/employees', icon: <Users className="h-5 w-5" />, label: 'Employees' },
   { to: '/admin/tasks', icon: <ClipboardCheck className="h-5 w-5" />, label: 'Tasks' },
-  { to: '/admin/templates', icon: <Template className="h-5 w-5" />, label: 'Templates' },
+  { to: '/admin/templates', icon: <FileTemplate className="h-5 w-5" />, label: 'Templates' },
   { to: '/admin/invoices', icon: <FileText className="h-5 w-5" />, label: 'Invoices' },
   { to: '/admin/analytics', icon: <PieChart className="h-5 w-5" />, label: 'Analytics' },
 ];

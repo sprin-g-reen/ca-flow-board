@@ -21,6 +21,7 @@ import OwnerInvoices from './pages/owner/OwnerInvoices';
 import OwnerCalendar from './pages/owner/OwnerCalendar';
 import OwnerAnalytics from './pages/owner/OwnerAnalytics';
 import OwnerSettings from './pages/owner/OwnerSettings';
+import OwnerTemplates from './pages/owner/OwnerTemplates';
 
 // Admin routes
 import AdminDashboard from './pages/admin/AdminDashboard';
