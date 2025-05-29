@@ -1,4 +1,5 @@
 
+
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Task, TaskStatus, TaskPriority, TaskCategory, SubTask } from '@/store/slices/tasksSlice';
@@ -67,8 +68,14 @@ export const useTasks = () => {
           isRecurring: task.is_recurring || false,
           recurrencePattern: task.recurrence_pattern,
           attachments: Array.isArray(task.attachments) ? task.attachments : [],
-          subtasks: Array.isArray(task.subtasks) ? task.subtasks as SubTask[] : [],
-          comments: Array.isArray(task.comments) ? task.comments : [],
+          subtasks: Array.isArray(task.subtasks) ? (task.subtasks as unknown as SubTask[]) : [],
+          comments: Array.isArray(task.comments) ? (task.comments as unknown as {
+            id: string;
+            userId: string;
+            userName: string;
+            message: string;
+            timestamp: string;
+          }[]) : [],
           price: task.price,
           isPayableTask: task.is_payable_task || false,
           payableTaskType: task.payable_task_type as 'payable_task_1' | 'payable_task_2' | undefined,
@@ -157,3 +164,4 @@ export const useTasks = () => {
     isUpdating: updateTaskStatus.isPending,
   };
 };
+
