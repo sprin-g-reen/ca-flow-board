@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -160,7 +161,7 @@ export const DatabaseCreateTemplateForm = ({ onSuccess, templateId }: DatabaseCr
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  <SelectItem value="">No specific employee</SelectItem>
+                  <SelectItem value="unassigned">No specific employee</SelectItem>
                   {employees.map((employee) => (
                     <SelectItem key={employee.id} value={employee.id}>
                       {employee.employee_id}
