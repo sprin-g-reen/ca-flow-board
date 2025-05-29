@@ -18,6 +18,7 @@ export interface TaskTemplate {
   created_by?: string;
   created_at: string;
   updated_at: string;
+  is_deleted?: boolean;
 }
 
 export interface CreateTemplateData {
@@ -42,18 +43,28 @@ export const useTemplates = () => {
     queryFn: async () => {
       console.log('Fetching templates from database...');
       
-      const { data, error } = await supabase
-        .from('task_templates')
-        .select('*')
-        .eq('is_deleted', false)
-        .order('created_at', { ascending: false });
-
+      // Use rpc call as fallback for new tables
+      const { data, error } = await supabase.rpc('get_task_templates') as any;
+      
       if (error) {
-        console.error('Error fetching templates:', error);
-        throw error;
+        // If RPC doesn't exist, try direct query with type assertion
+        console.log('RPC not found, trying direct query...');
+        const directQuery = await (supabase as any)
+          .from('task_templates')
+          .select('*')
+          .eq('is_deleted', false)
+          .order('created_at', { ascending: false });
+
+        if (directQuery.error) {
+          console.error('Error fetching templates:', directQuery.error);
+          throw directQuery.error;
+        }
+
+        console.log('Fetched templates:', directQuery.data);
+        return directQuery.data as TaskTemplate[];
       }
 
-      console.log('Fetched templates:', data);
+      console.log('Fetched templates via RPC:', data);
       return data as TaskTemplate[];
     },
   });
@@ -62,7 +73,7 @@ export const useTemplates = () => {
     mutationFn: async (templateData: CreateTemplateData) => {
       console.log('Creating template:', templateData);
       
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('task_templates')
         .insert(templateData)
         .select()
@@ -86,7 +97,7 @@ export const useTemplates = () => {
     mutationFn: async ({ id, ...updateData }: Partial<TaskTemplate> & { id: string }) => {
       console.log('Updating template:', { id, updateData });
       
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('task_templates')
         .update({ ...updateData, updated_at: new Date().toISOString() })
         .eq('id', id)
@@ -110,7 +121,7 @@ export const useTemplates = () => {
     mutationFn: async (templateId: string) => {
       console.log('Deleting template:', templateId);
       
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('task_templates')
         .update({ is_deleted: true, updated_at: new Date().toISOString() })
         .eq('id', templateId);
