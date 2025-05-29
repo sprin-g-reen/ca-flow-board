@@ -96,7 +96,11 @@ const TaskFilters = () => {
   };
 
   const handleDueDateChange = (value: string) => {
-    dispatch(setActiveFilters({ dueDate: value }));
+    if (value === 'all') {
+      dispatch(setActiveFilters({ dueDate: undefined }));
+    } else {
+      dispatch(setActiveFilters({ dueDate: value }));
+    }
   };
 
   return (
@@ -178,7 +182,7 @@ const TaskFilters = () => {
           <div>
             <Label className="mb-2 block font-medium">Due Date</Label>
             <Select 
-              value={activeFilters.dueDate || ''}
+              value={activeFilters.dueDate || 'all'}
               onValueChange={handleDueDateChange}
             >
               <SelectTrigger>
@@ -186,7 +190,7 @@ const TaskFilters = () => {
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectItem value="">All Dates</SelectItem>
+                  <SelectItem value="all">All Dates</SelectItem>
                   {dueDateOptions.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
