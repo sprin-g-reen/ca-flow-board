@@ -1,36 +1,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-
-interface Task {
-  id: string;
-  title: string;
-  description?: string;
-  status: 'todo' | 'inprogress' | 'review' | 'completed';
-  priority: 'low' | 'medium' | 'high' | 'urgent';
-  category: 'gst' | 'itr' | 'roc' | 'other';
-  client_id?: string;
-  client_name?: string;
-  assigned_to?: string[];
-  created_by?: string;
-  created_at?: string;
-  due_date?: string;
-  completed_at?: string;
-  is_template?: boolean;
-  template_id?: string;
-  is_recurring?: boolean;
-  recurrence_pattern?: string;
-  attachments?: string[];
-  subtasks?: any[];
-  comments?: any[];
-  price?: number;
-  is_payable_task?: boolean;
-  payable_task_type?: string;
-  quotation_sent?: boolean;
-  payment_status?: 'pending' | 'paid' | 'failed';
-  quotation_number?: string;
-  is_deleted?: boolean;
-}
+import { Task, TaskStatus, TaskPriority, TaskCategory } from '@/store/slices/tasksSlice';
 
 interface CreateTaskData {
   title: string;
@@ -75,13 +46,38 @@ export const useTasks = () => {
 
         console.log('Fetched tasks:', data);
         
-        // Transform the data to include client_name
-        const transformedTasks = data.map(task => ({
-          ...task,
-          client_name: task.clients?.name || null,
+        // Transform the data to match the Task interface
+        const transformedTasks: Task[] = data.map(task => ({
+          id: task.id,
+          title: task.title,
+          description: task.description || '',
+          status: task.status as TaskStatus,
+          priority: task.priority as TaskPriority,
+          category: task.category as TaskCategory,
+          clientId: task.client_id || '',
+          clientName: task.clients?.name || task.client_name || '',
+          assignedTo: task.assigned_to || [],
+          createdBy: task.created_by || '',
+          createdAt: task.created_at || '',
+          dueDate: task.due_date || '',
+          completedAt: task.completed_at,
+          isTemplate: task.is_template || false,
+          templateId: task.template_id,
+          parentTaskId: undefined, // This field doesn't exist in DB yet
+          isRecurring: task.is_recurring || false,
+          recurrencePattern: task.recurrence_pattern,
+          attachments: task.attachments || [],
+          subtasks: task.subtasks || [],
+          comments: task.comments || [],
+          price: task.price,
+          isPayableTask: task.is_payable_task || false,
+          payableTaskType: task.payable_task_type as 'payable_task_1' | 'payable_task_2' | undefined,
+          quotationSent: task.quotation_sent,
+          paymentStatus: task.payment_status as 'pending' | 'paid' | 'failed' | undefined,
+          quotationNumber: task.quotation_number,
         }));
 
-        return transformedTasks || [];
+        return transformedTasks;
       } catch (err) {
         console.error('Tasks fetch error:', err);
         throw err;
