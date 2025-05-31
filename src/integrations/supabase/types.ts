@@ -9,36 +9,266 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      clients: {
+      client_communications: {
         Row: {
-          address: string | null
+          attachments: string[] | null
+          client_id: string | null
+          communication_type: string
+          created_at: string
+          id: string
+          is_deleted: boolean | null
+          message: string | null
+          metadata: Json | null
+          recipient_email: string | null
+          recipient_phone: string | null
+          scheduled_at: string | null
+          sender_id: string | null
+          sent_at: string | null
+          status: string | null
+          subject: string | null
+          updated_at: string
+        }
+        Insert: {
+          attachments?: string[] | null
+          client_id?: string | null
+          communication_type: string
+          created_at?: string
+          id?: string
+          is_deleted?: boolean | null
+          message?: string | null
+          metadata?: Json | null
+          recipient_email?: string | null
+          recipient_phone?: string | null
+          scheduled_at?: string | null
+          sender_id?: string | null
+          sent_at?: string | null
+          status?: string | null
+          subject?: string | null
+          updated_at?: string
+        }
+        Update: {
+          attachments?: string[] | null
+          client_id?: string | null
+          communication_type?: string
+          created_at?: string
+          id?: string
+          is_deleted?: boolean | null
+          message?: string | null
+          metadata?: Json | null
+          recipient_email?: string | null
+          recipient_phone?: string | null
+          scheduled_at?: string | null
+          sender_id?: string | null
+          sent_at?: string | null
+          status?: string | null
+          subject?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_communications_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_communications_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_contacts: {
+        Row: {
+          client_id: string | null
+          contact_name: string
           created_at: string | null
+          department: string | null
+          designation: string | null
           email: string | null
           id: string
           is_deleted: boolean | null
-          name: string
+          is_primary: boolean | null
+          notes: string | null
           phone: string | null
           updated_at: string | null
         }
         Insert: {
-          address?: string | null
+          client_id?: string | null
+          contact_name: string
           created_at?: string | null
+          department?: string | null
+          designation?: string | null
           email?: string | null
           id?: string
           is_deleted?: boolean | null
-          name: string
+          is_primary?: boolean | null
+          notes?: string | null
           phone?: string | null
           updated_at?: string | null
         }
         Update: {
-          address?: string | null
+          client_id?: string | null
+          contact_name?: string
           created_at?: string | null
+          department?: string | null
+          designation?: string | null
           email?: string | null
           id?: string
           is_deleted?: boolean | null
-          name?: string
+          is_primary?: boolean | null
+          notes?: string | null
           phone?: string | null
           updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_contacts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_documents: {
+        Row: {
+          client_id: string | null
+          created_at: string | null
+          document_name: string
+          document_type: string
+          expiry_date: string | null
+          file_path: string | null
+          file_size: number | null
+          id: string
+          is_deleted: boolean | null
+          status: string | null
+          updated_at: string | null
+          upload_date: string | null
+          uploaded_by: string | null
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string | null
+          document_name: string
+          document_type: string
+          expiry_date?: string | null
+          file_path?: string | null
+          file_size?: number | null
+          id?: string
+          is_deleted?: boolean | null
+          status?: string | null
+          updated_at?: string | null
+          upload_date?: string | null
+          uploaded_by?: string | null
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string | null
+          document_name?: string
+          document_type?: string
+          expiry_date?: string | null
+          file_path?: string | null
+          file_size?: number | null
+          id?: string
+          is_deleted?: boolean | null
+          status?: string | null
+          updated_at?: string | null
+          upload_date?: string | null
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_documents_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_documents_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clients: {
+        Row: {
+          address: string | null
+          billing_address: string | null
+          business_type: string | null
+          client_code: string | null
+          company_registration_number: string | null
+          contact_person: string | null
+          created_at: string | null
+          credit_limit: number | null
+          email: string | null
+          gst_number: string | null
+          id: string
+          industry: string | null
+          is_deleted: boolean | null
+          name: string
+          notes: string | null
+          pan_number: string | null
+          payment_terms: number | null
+          phone: string | null
+          shipping_address: string | null
+          status: string | null
+          updated_at: string | null
+          website: string | null
+        }
+        Insert: {
+          address?: string | null
+          billing_address?: string | null
+          business_type?: string | null
+          client_code?: string | null
+          company_registration_number?: string | null
+          contact_person?: string | null
+          created_at?: string | null
+          credit_limit?: number | null
+          email?: string | null
+          gst_number?: string | null
+          id?: string
+          industry?: string | null
+          is_deleted?: boolean | null
+          name: string
+          notes?: string | null
+          pan_number?: string | null
+          payment_terms?: number | null
+          phone?: string | null
+          shipping_address?: string | null
+          status?: string | null
+          updated_at?: string | null
+          website?: string | null
+        }
+        Update: {
+          address?: string | null
+          billing_address?: string | null
+          business_type?: string | null
+          client_code?: string | null
+          company_registration_number?: string | null
+          contact_person?: string | null
+          created_at?: string | null
+          credit_limit?: number | null
+          email?: string | null
+          gst_number?: string | null
+          id?: string
+          industry?: string | null
+          is_deleted?: boolean | null
+          name?: string
+          notes?: string | null
+          pan_number?: string | null
+          payment_terms?: number | null
+          phone?: string | null
+          shipping_address?: string | null
+          status?: string | null
+          updated_at?: string | null
+          website?: string | null
         }
         Relationships: []
       }
@@ -311,7 +541,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      generate_client_code: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never

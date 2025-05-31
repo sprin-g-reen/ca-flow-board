@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -14,6 +13,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { useTemplates } from '@/hooks/useTemplates';
 import { useEmployees } from '@/hooks/useEmployees';
 import { getCategoryOptions } from './CategoryWorkflows';
+import { ClientSelector } from '@/components/ClientSelector';
 
 const templateSchema = z.object({
   title: z.string().min(1, 'Title is required'),
@@ -38,6 +38,7 @@ interface DatabaseCreateTemplateFormProps {
 export const DatabaseCreateTemplateForm = ({ onSuccess, templateId }: DatabaseCreateTemplateFormProps) => {
   const [subtasks, setSubtasks] = useState<Array<{ title: string; description: string; order: number }>>([]);
   const [currentSubtask, setCurrentSubtask] = useState({ title: '', description: '' });
+  const [selectedClient, setSelectedClient] = useState(null);
   
   const { createTemplate, isCreating } = useTemplates();
   const { employees } = useEmployees();
@@ -72,6 +73,14 @@ export const DatabaseCreateTemplateForm = ({ onSuccess, templateId }: DatabaseCr
     setSubtasks(prev => prev.filter((_, i) => i !== index));
   };
 
+  const handleClientSelect = (client) => {
+    setSelectedClient(client);
+    // Pre-fill client data in the template
+    if (client) {
+      form.setValue('title', `${form.getValues('title')} - ${client.name}`);
+    }
+  };
+
   const onSubmit = (data: TemplateFormData) => {
     const templateData = {
       title: data.title,
@@ -85,6 +94,18 @@ export const DatabaseCreateTemplateForm = ({ onSuccess, templateId }: DatabaseCr
       is_payable_task: data.is_payable_task,
       payable_task_type: data.payable_task_type,
       assigned_employee_id: data.assigned_employee_id,
+      // Include client information if selected
+      client_id: selectedClient?.id,
+      client_name: selectedClient?.name,
+      client_data: selectedClient ? {
+        client_code: selectedClient.client_code,
+        contact_person: selectedClient.contact_person,
+        email: selectedClient.email,
+        phone: selectedClient.phone,
+        gst_number: selectedClient.gst_number,
+        pan_number: selectedClient.pan_number,
+        business_type: selectedClient.business_type,
+      } : null,
     };
 
     console.log('Creating template with data:', templateData);
@@ -95,6 +116,39 @@ export const DatabaseCreateTemplateForm = ({ onSuccess, templateId }: DatabaseCr
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        {/* Client Selection Section */}
+        <div className="space-y-4 p-4 border rounded-lg bg-gray-50">
+          <h3 className="text-lg font-medium">Client Pre-filling (Optional)</h3>
+          <p className="text-sm text-gray-600">
+            Select a client to pre-fill their information in tasks created from this template
+          </p>
+          <ClientSelector
+            onClientSelect={handleClientSelect}
+            selectedClientId={selectedClient?.id}
+            placeholder="Search and select a client for this template..."
+          />
+          {selectedClient && (
+            <div className="mt-2 p-3 bg-white border rounded">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-medium">{selectedClient.name}</h4>
+                  <p className="text-sm text-gray-500">
+                    {selectedClient.contact_person} • {selectedClient.client_code}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedClient(null)}
+                >
+                  Remove
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+
         <FormField
           control={form.control}
           name="title"
