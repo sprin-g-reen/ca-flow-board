@@ -1,36 +1,41 @@
 
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
 import { useClients } from '@/hooks/useClients';
 
 const formSchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters"),
-  contact_person: z.string().min(2, "Contact person must be at least 2 characters"),
-  email: z.string().email("Please enter a valid email").optional().or(z.literal("")),
-  phone: z.string().min(5, "Please enter a valid phone number"),
+  name: z.string().min(2, "Company name must be at least 2 characters"),
+  email: z.string().email("Please enter a valid email address"),
+  phone: z.string().optional(),
+  contact_person: z.string().optional(),
   address: z.string().optional(),
   billing_address: z.string().optional(),
   shipping_address: z.string().optional(),
-  company_registration_number: z.string().optional(),
-  gst_number: z.string().optional(),
-  pan_number: z.string().optional(),
   business_type: z.string().optional(),
   industry: z.string().optional(),
+  gst_number: z.string().optional(),
+  pan_number: z.string().optional(),
+  company_registration_number: z.string().optional(),
+  credit_limit: z.number().min(0).optional(),
+  payment_terms: z.number().min(1).optional(),
   website: z.string().optional(),
   notes: z.string().optional(),
-  payment_terms: z.number().optional(),
-  credit_limit: z.number().optional(),
+  status: z.string().default('active'),
 });
 
-export function AddClientForm({ onSuccess }: { onSuccess: () => void }) {
+interface AddClientFormProps {
+  onSuccess: () => void;
+}
+
+export function AddClientForm({ onSuccess }: AddClientFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { addClient } = useClients();
   
@@ -38,35 +43,50 @@ export function AddClientForm({ onSuccess }: { onSuccess: () => void }) {
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: '',
-      contact_person: '',
       email: '',
       phone: '',
+      contact_person: '',
       address: '',
       billing_address: '',
       shipping_address: '',
-      company_registration_number: '',
-      gst_number: '',
-      pan_number: '',
       business_type: '',
       industry: '',
+      gst_number: '',
+      pan_number: '',
+      company_registration_number: '',
+      credit_limit: 0,
+      payment_terms: 30,
       website: '',
       notes: '',
-      payment_terms: 30,
-      credit_limit: 0,
+      status: 'active',
     },
   });
   
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
       setIsSubmitting(true);
+      console.log('Creating client with values:', values);
       
-      const clientData = {
-        ...values,
-        email: values.email || null,
-        status: 'active',
-      };
-      
-      addClient(clientData);
+      await addClient({
+        name: values.name,
+        email: values.email,
+        phone: values.phone,
+        contact_person: values.contact_person,
+        address: values.address,
+        billing_address: values.billing_address,
+        shipping_address: values.shipping_address,
+        business_type: values.business_type,
+        industry: values.industry,
+        gst_number: values.gst_number,
+        pan_number: values.pan_number,
+        company_registration_number: values.company_registration_number,
+        credit_limit: values.credit_limit,
+        payment_terms: values.payment_terms,
+        website: values.website,
+        notes: values.notes,
+        status: values.status,
+      });
+
       toast.success("Client created successfully");
       form.reset();
       onSuccess();
@@ -80,7 +100,7 @@ export function AddClientForm({ onSuccess }: { onSuccess: () => void }) {
   
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormField
             control={form.control}
@@ -98,38 +118,26 @@ export function AddClientForm({ onSuccess }: { onSuccess: () => void }) {
           
           <FormField
             control={form.control}
-            name="contact_person"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Contact Person *</FormLabel>
-                <FormControl>
-                  <Input placeholder="Enter contact person's name" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          
-          <FormField
-            control={form.control}
             name="email"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Email</FormLabel>
+                <FormLabel>Email *</FormLabel>
                 <FormControl>
-                  <Input placeholder="Enter email address" type="email" {...field} />
+                  <Input type="email" placeholder="Enter email address" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
-          
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormField
             control={form.control}
             name="phone"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Phone *</FormLabel>
+                <FormLabel>Phone</FormLabel>
                 <FormControl>
                   <Input placeholder="Enter phone number" {...field} />
                 </FormControl>
@@ -138,6 +146,36 @@ export function AddClientForm({ onSuccess }: { onSuccess: () => void }) {
             )}
           />
           
+          <FormField
+            control={form.control}
+            name="contact_person"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Contact Person</FormLabel>
+                <FormControl>
+                  <Input placeholder="Enter contact person name" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        <FormField
+          control={form.control}
+          name="address"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Address</FormLabel>
+              <FormControl>
+                <Textarea placeholder="Enter complete address" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormField
             control={form.control}
             name="business_type"
@@ -151,14 +189,11 @@ export function AddClientForm({ onSuccess }: { onSuccess: () => void }) {
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="proprietorship">Proprietorship</SelectItem>
                     <SelectItem value="partnership">Partnership</SelectItem>
-                    <SelectItem value="llp">LLP</SelectItem>
                     <SelectItem value="private_limited">Private Limited</SelectItem>
+                    <SelectItem value="llp">LLP</SelectItem>
+                    <SelectItem value="proprietorship">Proprietorship</SelectItem>
                     <SelectItem value="public_limited">Public Limited</SelectItem>
-                    <SelectItem value="trust">Trust</SelectItem>
-                    <SelectItem value="society">Society</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -173,13 +208,15 @@ export function AddClientForm({ onSuccess }: { onSuccess: () => void }) {
               <FormItem>
                 <FormLabel>Industry</FormLabel>
                 <FormControl>
-                  <Input placeholder="e.g., Manufacturing, IT, Retail" {...field} />
+                  <Input placeholder="e.g., Manufacturing, IT Services" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
-          
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormField
             control={form.control}
             name="gst_number"
@@ -207,29 +244,22 @@ export function AddClientForm({ onSuccess }: { onSuccess: () => void }) {
               </FormItem>
             )}
           />
-          
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormField
             control={form.control}
-            name="company_registration_number"
+            name="credit_limit"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Registration Number</FormLabel>
+                <FormLabel>Credit Limit (₹)</FormLabel>
                 <FormControl>
-                  <Input placeholder="Company registration number" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          
-          <FormField
-            control={form.control}
-            name="website"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Website</FormLabel>
-                <FormControl>
-                  <Input placeholder="https://example.com" {...field} />
+                  <Input 
+                    type="number" 
+                    placeholder="0.00"
+                    {...field}
+                    onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -245,28 +275,9 @@ export function AddClientForm({ onSuccess }: { onSuccess: () => void }) {
                 <FormControl>
                   <Input 
                     type="number" 
-                    placeholder="30" 
+                    placeholder="30"
                     {...field}
-                    onChange={(e) => field.onChange(Number(e.target.value))}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          
-          <FormField
-            control={form.control}
-            name="credit_limit"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Credit Limit</FormLabel>
-                <FormControl>
-                  <Input 
-                    type="number" 
-                    placeholder="0" 
-                    {...field}
-                    onChange={(e) => field.onChange(Number(e.target.value))}
+                    onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
                   />
                 </FormControl>
                 <FormMessage />
@@ -274,49 +285,7 @@ export function AddClientForm({ onSuccess }: { onSuccess: () => void }) {
             )}
           />
         </div>
-        
-        <FormField
-          control={form.control}
-          name="address"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Address</FormLabel>
-              <FormControl>
-                <Textarea placeholder="Enter complete address" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        
-        <FormField
-          control={form.control}
-          name="billing_address"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Billing Address</FormLabel>
-              <FormControl>
-                <Textarea placeholder="Enter billing address (if different)" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        
-        <FormField
-          control={form.control}
-          name="shipping_address"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Shipping Address</FormLabel>
-              <FormControl>
-                <Textarea placeholder="Enter shipping address (if different)" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        
+
         <FormField
           control={form.control}
           name="notes"
@@ -332,16 +301,13 @@ export function AddClientForm({ onSuccess }: { onSuccess: () => void }) {
         />
         
         <div className="pt-4 space-x-2 flex justify-end">
-          <Button type="button" variant="outline" onClick={onSuccess}>
-            Cancel
-          </Button>
-          <button 
+          <Button 
             type="submit" 
-            className="bg-ca-blue text-white px-4 py-2 rounded hover:bg-ca-blue-dark"
+            className="bg-ca-blue hover:bg-ca-blue-dark"
             disabled={isSubmitting}
           >
             {isSubmitting ? "Creating..." : "Create Client"}
-          </button>
+          </Button>
         </div>
       </form>
     </Form>

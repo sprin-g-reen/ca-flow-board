@@ -1,223 +1,305 @@
 
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Button } from '@/components/ui/button';
+import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ClientSelector } from '@/components/clients/ClientSelector';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { toast } from 'sonner';
 import { useQuotations } from '@/hooks/usePayments';
-import { CalendarIcon, Send } from 'lucide-react';
+import { useClients } from '@/hooks/useClients';
+import { useTasks } from '@/hooks/useTasks';
+import { Calculator, Send, Smartphone } from 'lucide-react';
 
-const quotationSchema = z.object({
-  amount: z.number().min(0.01, 'Amount must be greater than 0'),
+const formSchema = z.object({
+  task_id: z.string().min(1, "Please select a task"),
+  client_id: z.string().min(1, "Please select a client"),
+  amount: z.number().min(0.01, "Amount must be greater than 0"),
   tax_rate: z.number().min(0).max(100).default(18),
   payment_terms: z.string().optional(),
   notes: z.string().optional(),
-  valid_until: z.string().optional(),
   payment_type: z.enum(['payable_task_1', 'payable_task_2']),
+  valid_until: z.string().optional(),
 });
 
-type QuotationFormData = z.infer<typeof quotationSchema>;
-
-interface Props {
-  taskId?: string;
-  onSuccess?: () => void;
+interface QuotationFormProps {
+  onSuccess: () => void;
 }
 
-export const QuotationForm: React.FC<Props> = ({ taskId, onSuccess }) => {
-  const [selectedClient, setSelectedClient] = useState<any>(null);
-  const { createQuotation, sendWhatsAppQuotation, isCreating, isSending } = useQuotations();
+export function QuotationForm({ onSuccess }: QuotationFormProps) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { createQuotation } = useQuotations();
+  const { clients } = useClients();
+  const { tasks } = useTasks();
 
-  const {
-    register,
-    handleSubmit,
-    setValue,
-    watch,
-    formState: { errors },
-  } = useForm<QuotationFormData>({
-    resolver: zodResolver(quotationSchema),
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
     defaultValues: {
+      task_id: '',
+      client_id: '',
+      amount: 0,
       tax_rate: 18,
+      payment_terms: 'Net 30 days',
+      notes: '',
       payment_type: 'payable_task_1',
+      valid_until: '',
     },
   });
 
-  const amount = watch('amount');
-  const taxRate = watch('tax_rate');
+  const amount = form.watch('amount');
+  const taxRate = form.watch('tax_rate');
+  const taxAmount = (amount * taxRate) / 100;
+  const totalAmount = amount + taxAmount;
 
-  const calculateTotals = () => {
-    const baseAmount = amount || 0;
-    const tax = (baseAmount * (taxRate || 0)) / 100;
-    const total = baseAmount + tax;
-    return { tax, total };
-  };
+  // Filter payable tasks
+  const payableTasks = tasks.filter(task => task.isPayableTask && !task.quotationSent);
 
-  const { tax, total } = calculateTotals();
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    try {
+      setIsSubmitting(true);
+      console.log('Creating quotation with values:', values);
 
-  const onSubmit = async (data: QuotationFormData) => {
-    if (!selectedClient) {
-      return;
-    }
+      await createQuotation({
+        task_id: values.task_id,
+        client_id: values.client_id,
+        amount: values.amount,
+        tax_rate: values.tax_rate,
+        tax_amount: taxAmount,
+        total_amount: totalAmount,
+        payment_terms: values.payment_terms,
+        notes: values.notes,
+        payment_type: values.payment_type,
+        status: 'draft',
+        sent_via_whatsapp: false,
+        valid_until: values.valid_until || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      });
 
-    const quotationData = {
-      ...data,
-      task_id: taskId,
-      client_id: selectedClient.id,
-      tax_amount: tax,
-      total_amount: total,
-      status: 'draft' as const,
-      sent_via_whatsapp: false,
-      valid_until: data.valid_until || null,
-    };
-
-    createQuotation(quotationData);
-    onSuccess?.();
-  };
-
-  const handleSendWhatsApp = () => {
-    if (selectedClient?.phone) {
-      // This would be called after quotation is created
-      // For now, we'll show a placeholder
-      console.log('Send WhatsApp to:', selectedClient.phone);
+      toast.success("Quotation created successfully");
+      form.reset();
+      onSuccess();
+    } catch (error) {
+      console.error('Error creating quotation:', error);
+      toast.error("Failed to create quotation");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Send className="h-5 w-5" />
-          Create Quotation
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          <div className="space-y-2">
-            <Label>Client *</Label>
-            <ClientSelector
-              onClientSelect={setSelectedClient}
-              selectedClientId={selectedClient?.id}
-              placeholder="Select a client for this quotation"
-            />
-            {!selectedClient && (
-              <p className="text-sm text-red-600">Please select a client</p>
-            )}
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="amount">Amount (₹) *</Label>
-              <Input
-                id="amount"
-                type="number"
-                step="0.01"
-                {...register('amount', { valueAsNumber: true })}
-                placeholder="Enter base amount"
-              />
-              {errors.amount && (
-                <p className="text-sm text-red-600">{errors.amount.message}</p>
+    <div className="space-y-6">
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FormField
+              control={form.control}
+              name="task_id"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Task *</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a payable task" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {payableTasks.map(task => (
+                        <SelectItem key={task.id} value={task.id}>
+                          <div className="flex items-center justify-between w-full">
+                            <span>{task.title}</span>
+                            <Badge variant="outline" className="ml-2">
+                              ₹{task.price?.toLocaleString()}
+                            </Badge>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
               )}
-            </div>
+            />
 
-            <div className="space-y-2">
-              <Label htmlFor="tax_rate">Tax Rate (%)</Label>
-              <Input
-                id="tax_rate"
-                type="number"
-                step="0.01"
-                {...register('tax_rate', { valueAsNumber: true })}
-                placeholder="18"
-              />
-            </div>
-          </div>
-
-          {amount > 0 && (
-            <div className="bg-gray-50 p-4 rounded-lg space-y-2">
-              <div className="flex justify-between">
-                <span>Base Amount:</span>
-                <span>₹{amount.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Tax ({taxRate}%):</span>
-                <span>₹{tax.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between font-bold text-lg border-t pt-2">
-                <span>Total Amount:</span>
-                <span>₹{total.toFixed(2)}</span>
-              </div>
-            </div>
-          )}
-
-          <div className="space-y-2">
-            <Label htmlFor="payment_type">Payment Configuration</Label>
-            <Select onValueChange={(value) => setValue('payment_type', value as any)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select payment configuration" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="payable_task_1">Payment Config 1</SelectItem>
-                <SelectItem value="payable_task_2">Payment Config 2</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="valid_until">Valid Until</Label>
-            <Input
-              id="valid_until"
-              type="date"
-              {...register('valid_until')}
+            <FormField
+              control={form.control}
+              name="client_id"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Client *</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select client" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {clients.map(client => (
+                        <SelectItem key={client.id} value={client.id}>
+                          {client.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="payment_terms">Payment Terms</Label>
-            <Textarea
-              id="payment_terms"
-              {...register('payment_terms')}
-              placeholder="e.g., Payment due within 30 days"
-              rows={2}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <FormField
+              control={form.control}
+              name="amount"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Base Amount (₹) *</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      {...field}
+                      onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : 0)}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="tax_rate"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Tax Rate (%)</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      placeholder="18"
+                      {...field}
+                      onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : 18)}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="payment_type"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Payment Account</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select account" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="payable_task_1">Account 1 (Primary)</SelectItem>
+                      <SelectItem value="payable_task_2">Account 2 (Secondary)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="notes">Notes</Label>
-            <Textarea
-              id="notes"
-              {...register('notes')}
-              placeholder="Additional notes for the quotation"
-              rows={3}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Calculator className="h-5 w-5" />
+                Amount Calculation
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-3 gap-4 text-sm">
+                <div className="flex justify-between">
+                  <span>Base Amount:</span>
+                  <span>₹{amount.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Tax ({taxRate}%):</span>
+                  <span>₹{taxAmount.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between font-bold text-lg border-t pt-2">
+                  <span>Total Amount:</span>
+                  <span>₹{totalAmount.toFixed(2)}</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FormField
+              control={form.control}
+              name="payment_terms"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Payment Terms</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g., Net 30 days" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="valid_until"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Valid Until</FormLabel>
+                  <FormControl>
+                    <Input type="date" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
           </div>
 
-          <div className="flex gap-2">
+          <FormField
+            control={form.control}
+            name="notes"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Notes</FormLabel>
+                <FormControl>
+                  <Textarea 
+                    placeholder="Additional notes or terms for the quotation"
+                    rows={3}
+                    {...field} 
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <div className="flex justify-end space-x-2">
             <Button 
               type="submit" 
-              disabled={isCreating || !selectedClient} 
-              className="flex-1"
+              className="bg-ca-blue hover:bg-ca-blue-dark"
+              disabled={isSubmitting}
             >
-              {isCreating ? 'Creating...' : 'Create Quotation'}
+              <Send className="mr-2 h-4 w-4" />
+              {isSubmitting ? "Creating..." : "Create Quotation"}
             </Button>
-            
-            {selectedClient?.phone && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleSendWhatsApp}
-                disabled={isSending}
-                className="flex items-center gap-2"
-              >
-                📱 WhatsApp
-              </Button>
-            )}
           </div>
         </form>
-      </CardContent>
-    </Card>
+      </Form>
+    </div>
   );
-};
+}

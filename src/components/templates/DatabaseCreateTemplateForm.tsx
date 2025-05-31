@@ -35,7 +35,7 @@ interface Props {
 
 export const DatabaseCreateTemplateForm: React.FC<Props> = ({ onSuccess }) => {
   const [selectedClient, setSelectedClient] = useState<any>(null);
-  const { addTemplate, isAdding } = useTemplates();
+  const { createTemplate, isCreating } = useTemplates();
 
   const {
     register,
@@ -70,7 +70,7 @@ export const DatabaseCreateTemplateForm: React.FC<Props> = ({ onSuccess }) => {
         due_date: data.dueDate ? new Date(data.dueDate).toISOString() : null,
       };
 
-      addTemplate(templateData);
+      createTemplate(templateData);
       onSuccess?.();
     } catch (error) {
       toast.error('Failed to create template');
@@ -218,8 +218,8 @@ export const DatabaseCreateTemplateForm: React.FC<Props> = ({ onSuccess }) => {
             </div>
           )}
 
-          <Button type="submit" disabled={isAdding} className="w-full">
-            {isAdding ? 'Creating...' : 'Create Template'}
+          <Button type="submit" disabled={isCreating} className="w-full">
+            {isCreating ? 'Creating...' : 'Create Template'}
           </Button>
         </form>
       </CardContent>

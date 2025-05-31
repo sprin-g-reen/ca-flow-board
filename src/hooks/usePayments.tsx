@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
-interface Quotation {
+export interface Quotation {
   id: string;
   quotation_number: string;
   task_id?: string;
@@ -24,9 +24,12 @@ interface Quotation {
   created_by?: string;
   created_at: string;
   updated_at: string;
+  is_deleted: boolean;
+  clients?: { name: string };
+  tasks?: { title: string };
 }
 
-interface Payment {
+export interface Payment {
   id: string;
   payment_id: string;
   quotation_id?: string;
@@ -37,7 +40,7 @@ interface Payment {
   status: 'pending' | 'success' | 'failed' | 'cancelled' | 'refunded';
   payment_method?: string;
   payment_gateway?: 'razorpay_1' | 'razorpay_2' | 'stripe_1' | 'stripe_2';
-  gateway_response?: any;
+  gateway_response: any;
   transaction_fee: number;
   receipt_url?: string;
   receipt_sent: boolean;
@@ -45,11 +48,14 @@ interface Payment {
   paid_at?: string;
   created_at: string;
   updated_at: string;
+  is_deleted: boolean;
+  clients?: { name: string; email?: string; phone?: string };
+  quotations?: { quotation_number: string; amount: number; tax_amount: number; total_amount: number };
 }
 
-interface PaymentConfiguration {
+export interface PaymentConfiguration {
   id: string;
-  config_name: 'payable_task_1' | 'payable_task_2';
+  config_name: string;
   gateway_type: 'razorpay' | 'stripe';
   is_active: boolean;
   webhook_secret?: string;
@@ -59,125 +65,121 @@ interface PaymentConfiguration {
   logo_url?: string;
   created_at: string;
   updated_at: string;
+  is_deleted: boolean;
 }
 
+// Quotations hooks
 export const useQuotations = () => {
   const queryClient = useQueryClient();
 
   const { data: quotations = [], isLoading, error } = useQuery({
     queryKey: ['quotations'],
     queryFn: async () => {
-      try {
-        const { data, error } = await supabase
-          .from('quotations')
-          .select(`
-            *,
-            clients(name, email, phone),
-            tasks(title, description)
-          `)
-          .eq('is_deleted', false)
-          .order('created_at', { ascending: false });
+      const { data, error } = await supabase
+        .from('quotations')
+        .select(`
+          *,
+          clients(name),
+          tasks(title)
+        `)
+        .eq('is_deleted', false)
+        .order('created_at', { ascending: false });
 
-        if (error) throw error;
-        return data || [];
-      } catch (err) {
-        console.error('Quotations fetch error:', err);
-        return [];
-      }
+      if (error) throw error;
+      return data as Quotation[];
     },
   });
 
   const createQuotation = useMutation({
-    mutationFn: async (quotationData: Omit<Quotation, 'id' | 'quotation_number' | 'created_at' | 'updated_at'>) => {
-      try {
-        const { data, error } = await supabase
-          .from('quotations')
-          .insert([quotationData])
-          .select()
-          .single();
+    mutationFn: async (quotationData: Omit<Quotation, 'id' | 'created_at' | 'updated_at' | 'quotation_number'>) => {
+      const { data: userData } = await supabase.auth.getUser();
+      
+      const { data, error } = await supabase
+        .from('quotations')
+        .insert({
+          ...quotationData,
+          created_by: userData.user?.id,
+        })
+        .select()
+        .single();
 
-        if (error) throw error;
-        return data;
-      } catch (err) {
-        console.error('Quotation creation error:', err);
-        throw err;
-      }
+      if (error) throw error;
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['quotations'] });
       toast.success('Quotation created successfully');
     },
-    onError: () => {
+    onError: (error) => {
+      console.error('Error creating quotation:', error);
       toast.error('Failed to create quotation');
     },
   });
 
   const updateQuotation = useMutation({
     mutationFn: async ({ id, ...updates }: Partial<Quotation> & { id: string }) => {
-      try {
-        const { data, error } = await supabase
-          .from('quotations')
-          .update(updates)
-          .eq('id', id)
-          .select()
-          .single();
+      const { data, error } = await supabase
+        .from('quotations')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
 
-        if (error) throw error;
-        return data;
-      } catch (err) {
-        console.error('Quotation update error:', err);
-        throw err;
-      }
+      if (error) throw error;
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['quotations'] });
-      toast.success('Quotation updated successfully');
-    },
-    onError: () => {
-      toast.error('Failed to update quotation');
     },
   });
 
-  const sendWhatsAppQuotation = useMutation({
-    mutationFn: async ({ quotationId, phoneNumber }: { quotationId: string; phoneNumber: string }) => {
-      try {
-        // Get quotation details
-        const { data: quotation, error } = await supabase
-          .from('quotations')
-          .select('*')
-          .eq('id', quotationId)
-          .single();
+  const generatePaymentLink = useMutation({
+    mutationFn: async (quotationId: string) => {
+      const { data, error } = await supabase.functions.invoke('create-payment-link', {
+        body: { quotationId }
+      });
 
-        if (error) throw error;
-
-        // Create WhatsApp deep link
-        const message = `Hi! Please find your quotation ${quotation.quotation_number} for ₹${quotation.total_amount}. Payment link: ${quotation.payment_link_url || 'Will be shared shortly'}`;
-        const whatsappUrl = `https://wa.me/${phoneNumber.replace(/[^\d]/g, '')}?text=${encodeURIComponent(message)}`;
-
-        // Update quotation as sent via WhatsApp
-        await supabase
-          .from('quotations')
-          .update({ 
-            sent_via_whatsapp: true, 
-            whatsapp_sent_at: new Date().toISOString() 
-          })
-          .eq('id', quotationId);
-
-        // Open WhatsApp
-        window.open(whatsappUrl, '_blank');
-
-        return { success: true };
-      } catch (err) {
-        console.error('WhatsApp send error:', err);
-        throw err;
-      }
+      if (error) throw error;
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['quotations'] });
-      toast.success('WhatsApp quotation sent successfully');
+      toast.success('Payment link generated successfully');
     },
-    onError: () => {
-      toast.error('Failed to send WhatsApp quotation');
+    onError: (error) => {
+      console.error('Error generating payment link:', error);
+      toast.error('Failed to generate payment link');
+    },
+  });
+
+  const sendViaWhatsApp = useMutation({
+    mutationFn: async ({ quotationId, phoneNumber }: { quotationId: string; phoneNumber: string }) => {
+      // Get quotation details first
+      const quotation = quotations.find(q => q.id === quotationId);
+      if (!quotation) throw new Error('Quotation not found');
+
+      const message = `Hi! Please find your quotation ${quotation.quotation_number} for ₹${quotation.total_amount.toLocaleString()}. ${quotation.payment_link_url ? `Payment link: ${quotation.payment_link_url}` : ''}`;
+      const whatsappUrl = `https://wa.me/${phoneNumber.replace(/[^\d]/g, '')}?text=${encodeURIComponent(message)}`;
+      
+      // Update quotation as sent via WhatsApp
+      await updateQuotation.mutateAsync({
+        id: quotationId,
+        sent_via_whatsapp: true,
+        whatsapp_sent_at: new Date().toISOString(),
+        status: 'sent'
+      });
+
+      // Open WhatsApp
+      window.open(whatsappUrl, '_blank');
+      
+      return { whatsapp_url: whatsappUrl };
+    },
+    onSuccess: () => {
+      toast.success('Opening WhatsApp to send quotation');
+    },
+    onError: (error) => {
+      console.error('Error sending via WhatsApp:', error);
+      toast.error('Failed to prepare WhatsApp message');
     },
   });
 
@@ -186,125 +188,113 @@ export const useQuotations = () => {
     isLoading,
     error,
     createQuotation: createQuotation.mutate,
-    updateQuotation: updateQuotation.mutate,
-    sendWhatsAppQuotation: sendWhatsAppQuotation.mutate,
     isCreating: createQuotation.isPending,
+    updateQuotation: updateQuotation.mutate,
     isUpdating: updateQuotation.isPending,
-    isSending: sendWhatsAppQuotation.isPending,
+    generatePaymentLink: generatePaymentLink.mutate,
+    isGeneratingLink: generatePaymentLink.isPending,
+    sendViaWhatsApp: sendViaWhatsApp.mutate,
+    isSendingWhatsApp: sendViaWhatsApp.isPending,
   };
 };
 
+// Payments hooks
 export const usePayments = () => {
   const queryClient = useQueryClient();
 
-  const { data: payments = [], isLoading } = useQuery({
+  const { data: payments = [], isLoading, error } = useQuery({
     queryKey: ['payments'],
     queryFn: async () => {
-      try {
-        const { data, error } = await supabase
-          .from('payments')
-          .select(`
-            *,
-            clients(name, email, phone),
-            quotations(quotation_number, amount),
-            tasks(title)
-          `)
-          .eq('is_deleted', false)
-          .order('created_at', { ascending: false });
+      const { data, error } = await supabase
+        .from('payments')
+        .select(`
+          *,
+          clients(name, email, phone),
+          quotations(quotation_number, amount, tax_amount, total_amount)
+        `)
+        .eq('is_deleted', false)
+        .order('created_at', { ascending: false });
 
-        if (error) throw error;
-        return data || [];
-      } catch (err) {
-        console.error('Payments fetch error:', err);
-        return [];
-      }
+      if (error) throw error;
+      return data as Payment[];
     },
   });
 
-  const createPayment = useMutation({
-    mutationFn: async (paymentData: Omit<Payment, 'id' | 'created_at' | 'updated_at'>) => {
-      try {
-        const { data, error } = await supabase
-          .from('payments')
-          .insert([paymentData])
-          .select()
-          .single();
+  const sendReceipt = useMutation({
+    mutationFn: async ({ paymentId, sendVia }: { paymentId: string; sendVia: 'email' | 'whatsapp' }) => {
+      const { data, error } = await supabase.functions.invoke('send-receipt', {
+        body: { paymentId, sendVia }
+      });
 
-        if (error) throw error;
-        return data;
-      } catch (err) {
-        console.error('Payment creation error:', err);
-        throw err;
-      }
+      if (error) throw error;
+      return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['payments'] });
-      toast.success('Payment recorded successfully');
+      if (data.whatsapp_url) {
+        window.open(data.whatsapp_url, '_blank');
+      }
+      toast.success('Receipt sent successfully');
     },
-    onError: () => {
-      toast.error('Failed to record payment');
+    onError: (error) => {
+      console.error('Error sending receipt:', error);
+      toast.error('Failed to send receipt');
     },
   });
 
   return {
     payments,
     isLoading,
-    createPayment: createPayment.mutate,
-    isCreating: createPayment.isPending,
+    error,
+    sendReceipt: sendReceipt.mutate,
+    isSendingReceipt: sendReceipt.isPending,
   };
 };
 
+// Payment Configurations hooks
 export const usePaymentConfigurations = () => {
   const queryClient = useQueryClient();
 
-  const { data: configurations = [], isLoading } = useQuery({
+  const { data: configurations = [], isLoading, error } = useQuery({
     queryKey: ['payment-configurations'],
     queryFn: async () => {
-      try {
-        const { data, error } = await supabase
-          .from('payment_configurations')
-          .select('*')
-          .eq('is_deleted', false)
-          .order('config_name');
+      const { data, error } = await supabase
+        .from('payment_configurations')
+        .select('*')
+        .eq('is_deleted', false)
+        .order('config_name');
 
-        if (error) throw error;
-        return data || [];
-      } catch (err) {
-        console.error('Payment configurations fetch error:', err);
-        return [];
-      }
+      if (error) throw error;
+      return data as PaymentConfiguration[];
     },
   });
 
   const updateConfiguration = useMutation({
     mutationFn: async ({ id, ...updates }: Partial<PaymentConfiguration> & { id: string }) => {
-      try {
-        const { data, error } = await supabase
-          .from('payment_configurations')
-          .update(updates)
-          .eq('id', id)
-          .select()
-          .single();
+      const { data, error } = await supabase
+        .from('payment_configurations')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
 
-        if (error) throw error;
-        return data;
-      } catch (err) {
-        console.error('Configuration update error:', err);
-        throw err;
-      }
+      if (error) throw error;
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['payment-configurations'] });
-      toast.success('Payment configuration updated successfully');
+      toast.success('Configuration updated successfully');
     },
-    onError: () => {
-      toast.error('Failed to update payment configuration');
+    onError: (error) => {
+      console.error('Error updating configuration:', error);
+      toast.error('Failed to update configuration');
     },
   });
 
   return {
     configurations,
     isLoading,
+    error,
     updateConfiguration: updateConfiguration.mutate,
     isUpdating: updateConfiguration.isPending,
   };
