@@ -9,6 +9,36 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      automation_settings: {
+        Row: {
+          auto_invoice_generation: boolean | null
+          created_at: string
+          deadline_reminders_enabled: boolean | null
+          id: string
+          reminder_days_before: number | null
+          updated_at: string
+          whatsapp_notifications: boolean | null
+        }
+        Insert: {
+          auto_invoice_generation?: boolean | null
+          created_at?: string
+          deadline_reminders_enabled?: boolean | null
+          id?: string
+          reminder_days_before?: number | null
+          updated_at?: string
+          whatsapp_notifications?: boolean | null
+        }
+        Update: {
+          auto_invoice_generation?: boolean | null
+          created_at?: string
+          deadline_reminders_enabled?: boolean | null
+          id?: string
+          reminder_days_before?: number | null
+          updated_at?: string
+          whatsapp_notifications?: boolean | null
+        }
+        Relationships: []
+      }
       client_communications: {
         Row: {
           attachments: string[] | null
@@ -649,6 +679,57 @@ export type Database = {
           {
             foreignKeyName: "quotations_task_id_fkey"
             columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recurring_schedules: {
+        Row: {
+          assigned_to: string[] | null
+          client_id: string | null
+          created_at: string
+          id: string
+          is_active: boolean | null
+          last_generated_at: string | null
+          next_generation_date: string
+          template_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          assigned_to?: string[] | null
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          last_generated_at?: string | null
+          next_generation_date: string
+          template_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string[] | null
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          last_generated_at?: string | null
+          next_generation_date?: string
+          template_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recurring_schedules_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recurring_schedules_template_id_fkey"
+            columns: ["template_id"]
             isOneToOne: false
             referencedRelation: "tasks"
             referencedColumns: ["id"]

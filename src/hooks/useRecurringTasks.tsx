@@ -27,12 +27,11 @@ export const useRecurringTasks = () => {
   const { data: schedules = [], isLoading } = useQuery({
     queryKey: ['recurring-schedules'],
     queryFn: async () => {
-      // Use type assertion for new table access
       const { data, error } = await (supabase as any)
-        .from('recurring_task_schedule')
+        .from('recurring_schedules')
         .select(`
           *,
-          task_templates (
+          tasks!template_id (
             title,
             category,
             recurrence_pattern
@@ -53,7 +52,7 @@ export const useRecurringTasks = () => {
   const createRecurringSchedule = useMutation({
     mutationFn: async (scheduleData: CreateRecurringScheduleData) => {
       const { data, error } = await (supabase as any)
-        .from('recurring_task_schedule')
+        .from('recurring_schedules')
         .insert(scheduleData)
         .select()
         .single();
@@ -75,8 +74,7 @@ export const useRecurringTasks = () => {
       console.log('Generating recurring tasks...');
       
       try {
-        // Try to call the RPC function if it exists
-        const { data, error } = await (supabase as any).rpc('generate_recurring_tasks');
+        const { data, error } = await supabase.functions.invoke('generate-recurring-tasks');
 
         if (error) {
           console.error('Error generating recurring tasks:', error);

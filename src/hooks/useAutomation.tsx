@@ -2,24 +2,12 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
-interface RecurringSchedule {
-  id: string;
-  template_id: string;
-  client_id?: string;
-  assigned_to: string[];
-  last_generated_at?: string;
-  next_generation_date: string;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
 interface AutomationSettings {
   id: string;
-  auto_invoice_generation: boolean;
-  deadline_reminders_enabled: boolean;
-  whatsapp_notifications: boolean;
-  reminder_days_before: number;
+  auto_invoice_generation: boolean | null;
+  deadline_reminders_enabled: boolean | null;
+  whatsapp_notifications: boolean | null;
+  reminder_days_before: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -31,13 +19,16 @@ export const useAutomation = () => {
   const { data: settings, isLoading: isLoadingSettings } = useQuery({
     queryKey: ['automation-settings'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('automation_settings')
         .select('*')
         .single();
 
-      if (error && error.code !== 'PGRST116') throw error;
-      return data;
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error fetching automation settings:', error);
+        throw error;
+      }
+      return data as AutomationSettings | null;
     },
   });
 
@@ -90,13 +81,16 @@ export const useAutomation = () => {
   // Update automation settings
   const updateSettings = useMutation({
     mutationFn: async (settingsData: Partial<AutomationSettings>) => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('automation_settings')
         .upsert({ ...settingsData, updated_at: new Date().toISOString() })
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error updating automation settings:', error);
+        throw error;
+      }
       return data;
     },
     onSuccess: () => {
