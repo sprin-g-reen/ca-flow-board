@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -16,11 +17,11 @@ import { toast } from 'sonner';
 const templateSchema = z.object({
   title: z.string().min(1, 'Title is required'),
   description: z.string().optional(),
-  category: z.enum(['gst', 'itr', 'roc', 'other']), // Fixed to match the allowed types
+  category: z.enum(['gst', 'itr', 'roc', 'other']),
   priority: z.enum(['low', 'medium', 'high']),
   dueDate: z.string().optional(),
   isRecurring: z.boolean().default(false),
-  recurrencePattern: z.string().optional(),
+  recurrencePattern: z.enum(['monthly', 'yearly', 'custom']).optional(),
   isPayableTask: z.boolean().default(false),
   payableTaskType: z.enum(['payable_task_1', 'payable_task_2']).optional(),
   price: z.number().optional(),
@@ -30,7 +31,7 @@ type TemplateFormData = z.infer<typeof templateSchema>;
 
 interface Props {
   onSuccess?: () => void;
-  templateId?: string; // Added templateId prop for editing
+  templateId?: string;
 }
 
 export const DatabaseCreateTemplateForm: React.FC<Props> = ({ onSuccess, templateId }) => {
@@ -61,7 +62,7 @@ export const DatabaseCreateTemplateForm: React.FC<Props> = ({ onSuccess, templat
       const templateData = {
         title: data.title,
         description: data.description,
-        category: data.category, // This will now match the correct type
+        category: data.category,
         priority: data.priority,
         client_id: selectedClient?.id,
         client_name: selectedClient?.name,
@@ -173,16 +174,14 @@ export const DatabaseCreateTemplateForm: React.FC<Props> = ({ onSuccess, templat
           {isRecurring && (
             <div className="space-y-2">
               <Label htmlFor="recurrencePattern">Recurrence Pattern</Label>
-              <Select onValueChange={(value) => setValue('recurrencePattern', value)}>
+              <Select onValueChange={(value) => setValue('recurrencePattern', value as any)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select recurrence" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="daily">Daily</SelectItem>
-                  <SelectItem value="weekly">Weekly</SelectItem>
                   <SelectItem value="monthly">Monthly</SelectItem>
-                  <SelectItem value="quarterly">Quarterly</SelectItem>
                   <SelectItem value="yearly">Yearly</SelectItem>
+                  <SelectItem value="custom">Custom</SelectItem>
                 </SelectContent>
               </Select>
             </div>
