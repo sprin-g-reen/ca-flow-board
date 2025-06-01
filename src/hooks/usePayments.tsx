@@ -155,10 +155,98 @@ export const usePayments = () => {
     payments,
     isLoading,
     createQuotation: createQuotation.mutate,
+    isCreating: createQuotation.isPending,
     isCreatingQuotation: createQuotation.isPending,
     sendViaWhatsApp: sendViaWhatsApp.mutate,
     isSendingWhatsApp: sendViaWhatsApp.isPending,
     createPaymentLink: createPaymentLink.mutate,
     isCreatingPayment: createPaymentLink.isPending,
+  };
+};
+
+export const usePaymentConfigurations = () => {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  // Get payment configurations
+  const { data: configurations = [], isLoading } = useQuery({
+    queryKey: ['payment-configurations'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('payment_configurations')
+        .select('*')
+        .eq('is_deleted', false)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching payment configurations:', error);
+        throw error;
+      }
+
+      return data;
+    },
+  });
+
+  // Update payment configuration
+  const updateConfiguration = useMutation({
+    mutationFn: async (configData: any) => {
+      const { data, error } = await supabase
+        .from('payment_configurations')
+        .update({
+          ...configData,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', configData.id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error updating payment configuration:', error);
+        throw error;
+      }
+
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['payment-configurations'] });
+      toast({
+        title: "Configuration Updated",
+        description: "Payment configuration has been updated successfully.",
+      });
+    },
+  });
+
+  // Create payment configuration
+  const createConfiguration = useMutation({
+    mutationFn: async (configData: any) => {
+      const { data, error } = await supabase
+        .from('payment_configurations')
+        .insert(configData)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating payment configuration:', error);
+        throw error;
+      }
+
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['payment-configurations'] });
+      toast({
+        title: "Configuration Created",
+        description: "Payment configuration has been created successfully.",
+      });
+    },
+  });
+
+  return {
+    configurations,
+    isLoading,
+    updateConfiguration: updateConfiguration.mutate,
+    isUpdating: updateConfiguration.isPending,
+    createConfiguration: createConfiguration.mutate,
+    isCreating: createConfiguration.isPending,
   };
 };
