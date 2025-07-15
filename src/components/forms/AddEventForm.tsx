@@ -30,7 +30,7 @@ export function AddEventForm({ onSuccess }: { onSuccess: () => void }) {
       time: '09:00',
       type: 'meeting',
       description: '',
-      clientId: '',
+      clientId: undefined,
     },
   });
   
@@ -149,14 +149,13 @@ export function AddEventForm({ onSuccess }: { onSuccess: () => void }) {
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Client (Optional)</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select client" />
+                      <SelectValue placeholder="Select client (optional)" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="">None</SelectItem>
                     {clients.map(client => (
                       <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>
                     ))}
