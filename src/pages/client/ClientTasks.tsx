@@ -277,8 +277,8 @@ const ClientTasks = () => {
                       <div className="space-y-1">
                         {task.subtasks.slice(0, 3).map((subtask, index) => (
                           <div key={index} className="flex items-center gap-2 text-sm">
-                            <div className={`w-2 h-2 rounded-full ${subtask.completed ? 'bg-green-500' : 'bg-gray-300'}`} />
-                            <span className={subtask.completed ? 'line-through text-gray-500' : ''}>{subtask.title}</span>
+                            <div className={`w-2 h-2 rounded-full ${subtask.isCompleted ? 'bg-green-500' : 'bg-gray-300'}`} />
+                            <span className={subtask.isCompleted ? 'line-through text-gray-500' : ''}>{subtask.title}</span>
                           </div>
                         ))}
                         {task.subtasks.length > 3 && (
