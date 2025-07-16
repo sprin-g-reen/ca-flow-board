@@ -15,16 +15,33 @@ import {
 import { logout } from '@/store/slices/authSlice';
 import { RootState } from '@/store';
 import { toggleSidebar } from '@/store/slices/uiSlice';
+import { GlobalSearch } from '@/components/shared/GlobalSearch';
+import { useToast } from '@/hooks/use-toast';
 
 const AppHeader = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { name, role } = useSelector((state: RootState) => state.auth);
   const { notificationsUnread } = useSelector((state: RootState) => state.ui);
+  const { toast } = useToast();
 
   const handleLogout = () => {
     dispatch(logout());
     navigate('/login');
+  };
+
+  const handleNotifications = () => {
+    toast({
+      title: "Notifications",
+      description: "No new notifications at this time.",
+    });
+  };
+
+  const handleMessages = () => {
+    toast({
+      title: "Messages",
+      description: "Coming soon! WhatsApp and SMS integration will be available shortly.",
+    });
   };
 
   return (
@@ -37,16 +54,12 @@ const AppHeader = () => {
           <h2 className="text-2xl font-bold text-ca-blue ml-4">CA Flow</h2>
         </div>
         
-        <div className="md:flex lg:w-[400px] items-center bg-background rounded-md px-2 hidden">
-          <Search className="h-4 w-4 text-muted-foreground" />
-          <input
-            placeholder="Search tasks, clients, templates..."
-            className="flex w-full bg-background h-9 px-3 py-2 text-sm outline-none placeholder:text-muted-foreground"
-          />
+        <div className="hidden md:block lg:w-[400px]">
+          <GlobalSearch />
         </div>
         
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" className="relative">
+          <Button variant="ghost" size="icon" className="relative" onClick={handleNotifications}>
             <Bell className="h-5 w-5" />
             {notificationsUnread > 0 && (
               <span className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-ca-red text-[10px] text-white">
@@ -55,7 +68,7 @@ const AppHeader = () => {
             )}
           </Button>
           
-          <Button variant="ghost" size="icon">
+          <Button variant="ghost" size="icon" onClick={handleMessages}>
             <MessageSquare className="h-5 w-5" />
           </Button>
           
