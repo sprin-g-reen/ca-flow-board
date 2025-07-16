@@ -12,19 +12,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { ClientSelector } from '@/components/clients/ClientSelector';
 import { useTemplates } from '@/hooks/useTemplates';
+import { useEmployees } from '@/hooks/useEmployees';
 import { toast } from 'sonner';
 
 const templateSchema = z.object({
   title: z.string().min(1, 'Title is required'),
   description: z.string().optional(),
   category: z.enum(['gst', 'itr', 'roc', 'other']),
-  priority: z.enum(['low', 'medium', 'high']),
-  dueDate: z.string().optional(),
+  deadline: z.string().optional(),
   isRecurring: z.boolean().default(false),
   recurrencePattern: z.enum(['monthly', 'yearly', 'custom']).optional(),
   isPayableTask: z.boolean().default(false),
   payableTaskType: z.enum(['payable_task_1', 'payable_task_2']).optional(),
   price: z.number().optional(),
+  assignedEmployeeId: z.string().optional(),
 });
 
 type TemplateFormData = z.infer<typeof templateSchema>;
@@ -37,6 +38,7 @@ interface Props {
 export const DatabaseCreateTemplateForm: React.FC<Props> = ({ onSuccess, templateId }) => {
   const [selectedClient, setSelectedClient] = useState<any>(null);
   const { createTemplate, isCreating } = useTemplates();
+  const { employees } = useEmployees();
 
   const {
     register,
@@ -48,7 +50,6 @@ export const DatabaseCreateTemplateForm: React.FC<Props> = ({ onSuccess, templat
     resolver: zodResolver(templateSchema),
     defaultValues: {
       category: 'gst',
-      priority: 'medium',
       isRecurring: false,
       isPayableTask: false,
     },
@@ -63,23 +64,22 @@ export const DatabaseCreateTemplateForm: React.FC<Props> = ({ onSuccess, templat
         title: data.title,
         description: data.description,
         category: data.category,
-        priority: data.priority,
         client_id: selectedClient?.id,
-        client_name: selectedClient?.name,
-        is_template: true,
-        status: 'todo' as const,
         price: data.isPayableTask ? data.price : null,
         payable_task_type: data.isPayableTask ? data.payableTaskType : null,
         recurrence_pattern: data.isRecurring ? data.recurrencePattern : null,
-        due_date: data.dueDate ? new Date(data.dueDate).toISOString() : null,
+        deadline: data.deadline,
         is_recurring: data.isRecurring,
         is_payable_task: data.isPayableTask,
+        assigned_employee_id: data.assignedEmployeeId,
         subtasks: [],
       };
 
       createTemplate(templateData);
+      toast.success('Template created successfully');
       onSuccess?.();
     } catch (error) {
+      console.error('Error creating template:', error);
       toast.error('Failed to create template');
     }
   };
@@ -131,19 +131,6 @@ export const DatabaseCreateTemplateForm: React.FC<Props> = ({ onSuccess, templat
             )}
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="priority">Priority</Label>
-            <Select onValueChange={(value) => setValue('priority', value as any)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select priority" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="low">Low</SelectItem>
-                <SelectItem value="medium">Medium</SelectItem>
-                <SelectItem value="high">High</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
 
           <div className="space-y-2">
             <Label>Client (Optional)</Label>
@@ -155,11 +142,27 @@ export const DatabaseCreateTemplateForm: React.FC<Props> = ({ onSuccess, templat
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="dueDate">Due Date (Optional)</Label>
+            <Label htmlFor="assignedEmployeeId">Assigned Employee (Optional)</Label>
+            <Select onValueChange={(value) => setValue('assignedEmployeeId', value)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select an employee" />
+              </SelectTrigger>
+              <SelectContent>
+                {employees.map((employee) => (
+                  <SelectItem key={employee.id} value={employee.id}>
+                    {employee.employee_id}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="deadline">Deadline (Optional)</Label>
             <Input
-              id="dueDate"
+              id="deadline"
               type="datetime-local"
-              {...register('dueDate')}
+              {...register('deadline')}
             />
           </div>
 

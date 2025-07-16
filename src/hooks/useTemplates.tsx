@@ -15,6 +15,7 @@ export interface TaskTemplate {
   is_payable_task: boolean;
   payable_task_type?: 'payable_task_1' | 'payable_task_2';
   assigned_employee_id?: string;
+  client_id?: string;
   created_by?: string;
   created_at: string;
   updated_at: string;
@@ -33,6 +34,7 @@ export interface CreateTemplateData {
   is_payable_task: boolean;
   payable_task_type?: 'payable_task_1' | 'payable_task_2';
   assigned_employee_id?: string;
+  client_id?: string;
 }
 
 export const useTemplates = () => {
@@ -43,8 +45,8 @@ export const useTemplates = () => {
     queryFn: async () => {
       console.log('Fetching templates from database...');
       
-      // Direct query to task_templates table with type assertion
-      const { data, error } = await (supabase as any)
+      // Direct query to task_templates table
+      const { data, error } = await supabase
         .from('task_templates')
         .select('*')
         .eq('is_deleted', false)
@@ -64,7 +66,7 @@ export const useTemplates = () => {
     mutationFn: async (templateData: CreateTemplateData) => {
       console.log('Creating template:', templateData);
       
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from('task_templates')
         .insert(templateData)
         .select()
@@ -88,7 +90,7 @@ export const useTemplates = () => {
     mutationFn: async ({ id, ...updateData }: Partial<TaskTemplate> & { id: string }) => {
       console.log('Updating template:', { id, updateData });
       
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from('task_templates')
         .update({ ...updateData, updated_at: new Date().toISOString() })
         .eq('id', id)
@@ -112,7 +114,7 @@ export const useTemplates = () => {
     mutationFn: async (templateId: string) => {
       console.log('Deleting template:', templateId);
       
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from('task_templates')
         .update({ is_deleted: true, updated_at: new Date().toISOString() })
         .eq('id', templateId);

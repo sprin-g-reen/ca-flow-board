@@ -39,7 +39,7 @@ export function DatabaseTemplateManager() {
 
   const getEmployeeName = (employeeId: string) => {
     const employee = employees.find(emp => emp.id === employeeId);
-    return employee?.user_id || 'Unassigned';
+    return employee?.employee_id || 'Unassigned';
   };
 
   const handleDeleteTemplate = (templateId: string) => {
