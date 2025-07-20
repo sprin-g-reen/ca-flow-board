@@ -28,6 +28,11 @@ import {
 } from '@/components/ui/form';
 import { Separator } from '@/components/ui/separator';
 import { BackendConnectivityTest } from '@/components/testing/BackendConnectivityTest';
+import { SystemConfigurationSettings } from '@/components/settings/SystemConfigurationSettings';
+import { RecurringTaskAutomation } from '@/components/automation/RecurringTaskAutomation';
+import { IntegrationsTestSuite } from '@/components/testing/IntegrationsTestSuite';
+import { EmailTemplateManager } from '@/components/communication/EmailTemplateManager';
+import { ExcelManager } from '@/components/excel/ExcelManager';
 
 const OwnerSettings = () => {
   const [emailNotifications, setEmailNotifications] = useState(true);
@@ -48,11 +53,13 @@ const OwnerSettings = () => {
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="general" className="w-full">
-            <TabsList className="grid w-full grid-cols-5">
+            <TabsList className="grid w-full grid-cols-7">
               <TabsTrigger value="general">General</TabsTrigger>
               <TabsTrigger value="notifications">Notifications</TabsTrigger>
               <TabsTrigger value="security">Security</TabsTrigger>
               <TabsTrigger value="billing">Billing</TabsTrigger>
+              <TabsTrigger value="system">System</TabsTrigger>
+              <TabsTrigger value="automation">Automation</TabsTrigger>
               <TabsTrigger value="testing">Testing</TabsTrigger>
             </TabsList>
 
@@ -313,14 +320,46 @@ const OwnerSettings = () => {
               </div>
             </TabsContent>
 
+            <TabsContent value="system" className="space-y-6">
+              <div className="py-4">
+                <SystemConfigurationSettings />
+              </div>
+            </TabsContent>
+
+            <TabsContent value="automation" className="space-y-6">
+              <div className="py-4">
+                <div className="space-y-6">
+                  <RecurringTaskAutomation />
+                  <EmailTemplateManager />
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <ExcelManager 
+                      entityType="tasks" 
+                      data={[]} 
+                      onImport={(data) => console.log('Imported tasks:', data)}
+                    />
+                    <ExcelManager 
+                      entityType="clients" 
+                      data={[]} 
+                      onImport={(data) => console.log('Imported clients:', data)}
+                    />
+                  </div>
+                </div>
+              </div>
+            </TabsContent>
+
             <TabsContent value="testing" className="space-y-6">
-              <div className="space-y-4 py-4">
-                <h3 className="text-lg font-medium">Backend Connectivity Test</h3>
-                <Separator />
-                <p className="text-sm text-muted-foreground">
-                  Run comprehensive tests to verify all backend systems are connected and working properly.
-                </p>
-                <BackendConnectivityTest />
+              <div className="space-y-6 py-4">
+                <IntegrationsTestSuite />
+                <div>
+                  <h3 className="text-lg font-medium mb-4">Backend Connectivity Test</h3>
+                  <Separator />
+                  <div className="mt-4">
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Run basic connectivity tests to verify database and edge function connections.
+                    </p>
+                    <BackendConnectivityTest />
+                  </div>
+                </div>
               </div>
             </TabsContent>
           </Tabs>
