@@ -1,4 +1,3 @@
-
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
 export type BoardViewType = 'kanban' | 'list';
@@ -6,6 +5,7 @@ export type ThemeMode = 'light' | 'dark';
 
 interface UIState {
   sidebarCollapsed: boolean;
+  chatSidebarOpen: boolean; // Add this
   boardView: BoardViewType;
   theme: ThemeMode;
   notificationsUnread: number;
@@ -27,6 +27,7 @@ interface UIState {
 
 const initialState: UIState = {
   sidebarCollapsed: false,
+  chatSidebarOpen: false, // Add this
   boardView: 'kanban',
   theme: 'light',
   notificationsUnread: 3,
@@ -46,6 +47,9 @@ const uiSlice = createSlice({
   reducers: {
     toggleSidebar: (state) => {
       state.sidebarCollapsed = !state.sidebarCollapsed;
+    },
+    toggleChatSidebar: (state) => { // Add this
+      state.chatSidebarOpen = !state.chatSidebarOpen;
     },
     setBoardView: (state, action: PayloadAction<BoardViewType>) => {
       state.boardView = action.payload;
@@ -80,6 +84,7 @@ const uiSlice = createSlice({
 
 export const {
   toggleSidebar,
+  toggleChatSidebar, // Add this
   setBoardView,
   setTheme,
   setActiveFilters,

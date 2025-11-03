@@ -60,8 +60,8 @@ Best regards,
       category: 'notification',
       variables: ['employee_name', 'task_title', 'client_name', 'due_date', 'priority', 'task_description', 'company_name'],
       isActive: true,
-      createdAt: '2024-01-15T10:00:00Z',
-      updatedAt: '2024-01-15T10:00:00Z'
+      createdAt: '2025-01-15T10:00:00Z',
+      updatedAt: '2025-01-15T10:00:00Z'
     },
     {
       id: '2',
@@ -85,8 +85,8 @@ Best regards,
       category: 'reminder',
       variables: ['employee_name', 'task_title', 'client_name', 'due_date', 'days_remaining', 'task_status', 'company_name'],
       isActive: true,
-      createdAt: '2024-01-16T11:00:00Z',
-      updatedAt: '2024-01-16T11:00:00Z'
+      createdAt: '2025-01-16T11:00:00Z',
+      updatedAt: '2025-01-16T11:00:00Z'
     },
     {
       id: '3',
@@ -115,8 +115,8 @@ Best regards,
       category: 'quotation',
       variables: ['client_name', 'service_type', 'quotation_number', 'amount', 'valid_until', 'payment_link', 'company_name', 'contact_details'],
       isActive: true,
-      createdAt: '2024-01-17T09:00:00Z',
-      updatedAt: '2024-01-17T09:00:00Z'
+      createdAt: '2025-01-17T09:00:00Z',
+      updatedAt: '2025-01-17T09:00:00Z'
     },
     {
       id: '4',
@@ -147,8 +147,8 @@ Best regards,
       category: 'invoice',
       variables: ['client_name', 'invoice_number', 'total_amount', 'due_date', 'invoice_link', 'contact_email', 'contact_phone', 'company_name'],
       isActive: true,
-      createdAt: '2024-01-18T14:00:00Z',
-      updatedAt: '2024-01-18T14:00:00Z'
+      createdAt: '2025-01-18T14:00:00Z',
+      updatedAt: '2025-01-18T14:00:00Z'
     }
   ]);
 
@@ -246,20 +246,20 @@ Best regards,
     if (!selectedTemplate) return null;
 
     const previewData = {
-      employee_name: 'John Doe',
+      employee_name: 'Employee Name',
       task_title: 'GST Filing for ABC Corp',
       client_name: 'ABC Corporation',
-      due_date: '2024-02-15',
+      due_date: '2025-02-15',
       priority: 'High',
       task_description: 'Complete monthly GST filing and submit returns by due date.',
-      company_name: 'CA Flow Board',
+      company_name: 'Your Firm Name',
       days_remaining: '3',
       task_status: 'In Progress',
-      quotation_number: 'QUO-2024-001',
+      quotation_number: 'QUO-2025-001',
       amount: '15000',
-      valid_until: '2024-02-28',
+      valid_until: '2025-02-28',
       payment_link: 'https://example.com/pay/abc123',
-      contact_details: 'Email: contact@caflowboard.com | Phone: +91 98765 43210'
+      contact_details: 'Email: contact@yourfirm.com | Phone: +91 00000 00000'
     };
 
     let previewSubject = editForm.subject;

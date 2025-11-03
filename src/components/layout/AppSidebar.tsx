@@ -9,12 +9,13 @@ import {
   MessageSquare, 
   PieChart, 
   Settings, 
+  Trash2,
   Users
 } from 'lucide-react';
 import { RootState } from '@/store';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
+import { Button } from '@/components/ui/button';
 import { UserRole } from '@/store/slices/authSlice';
 
 interface SidebarLinkProps {
@@ -24,19 +25,38 @@ interface SidebarLinkProps {
   end?: boolean;
 }
 
-const SidebarLink = ({ to, icon, label, end = false }: SidebarLinkProps) => (
-  <NavLink 
-    to={to}
-    end={end}
-    className={({ isActive }) => cn(
-      "flex items-center gap-3 rounded-lg px-3 py-2 transition-all hover:bg-accent",
-      isActive ? "bg-accent text-accent-foreground" : "text-muted-foreground"
-    )}
-  >
-    {icon}
-    <span className="text-sm font-medium">{label}</span>
-  </NavLink>
-);
+const SidebarLink = ({ to, icon, label, end = false }: SidebarLinkProps) => {
+  const { sidebarCollapsed } = useSelector((state: RootState) => state.ui);
+  
+  return (
+    <NavLink 
+      to={to}
+      end={end}
+      className={({ isActive }) => cn(
+        "flex items-center gap-3 rounded-xl px-3 py-3 transition-all duration-200 hover:bg-accent/80 hover:shadow-sm group relative",
+        isActive 
+          ? "bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg shadow-blue-500/25" 
+          : "text-muted-foreground hover:text-foreground",
+        sidebarCollapsed && "justify-center px-2"
+      )}
+    >
+      <div className={cn(
+        "flex items-center justify-center transition-transform group-hover:scale-110",
+        sidebarCollapsed ? "w-6 h-6" : "w-5 h-5"
+      )}>
+        {icon}
+      </div>
+      {!sidebarCollapsed && (
+        <span className="text-sm font-medium transition-all">{label}</span>
+      )}
+      
+      {/* Active indicator */}
+      {!sidebarCollapsed && (
+        <div className="absolute right-2 w-1 h-6 bg-white/30 rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
+      )}
+    </NavLink>
+  );
+};
 
 const ownerLinks = [
   { to: '/owner/dashboard', icon: <LayoutDashboard className="h-5 w-5" />, label: 'Dashboard', end: true },
@@ -45,8 +65,9 @@ const ownerLinks = [
   { to: '/owner/tasks', icon: <ClipboardCheck className="h-5 w-5" />, label: 'Tasks' },
   { to: '/owner/templates', icon: <FileText className="h-5 w-5" />, label: 'Templates' },
   { to: '/owner/invoices', icon: <FileText className="h-5 w-5" />, label: 'Invoices' },
-  { to: '/owner/calendar', icon: <Calendar className="h-5 w-5" />, label: 'Calendar' },
+  { to: '/owner/views', icon: <LayoutDashboard className="h-5 w-5" />, label: 'Views' },
   { to: '/owner/analytics', icon: <PieChart className="h-5 w-5" />, label: 'Analytics' },
+  { to: '/owner/recycle-bin', icon: <Trash2 className="h-5 w-5" />, label: 'Recycle Bin' },
   { to: '/owner/settings', icon: <Settings className="h-5 w-5" />, label: 'Settings' },
 ];
 
@@ -62,7 +83,6 @@ const adminLinks = [
 const employeeLinks = [
   { to: '/employee/dashboard', icon: <LayoutDashboard className="h-5 w-5" />, label: 'Dashboard', end: true },
   { to: '/employee/tasks', icon: <ClipboardCheck className="h-5 w-5" />, label: 'My Tasks' },
-  { to: '/employee/calendar', icon: <Calendar className="h-5 w-5" />, label: 'Calendar' },
   { to: '/employee/clients', icon: <Users className="h-5 w-5" />, label: 'Clients' },
   { to: '/employee/chat', icon: <MessageSquare className="h-5 w-5" />, label: 'Messages' },
 ];
@@ -74,7 +94,11 @@ const clientLinks = [
   { to: '/client/chat', icon: <MessageSquare className="h-5 w-5" />, label: 'Messages' },
 ];
 
-const AppSidebar = () => {
+interface AppSidebarProps {
+  onChatToggle?: () => void;
+}
+
+const AppSidebar = ({ onChatToggle }: AppSidebarProps = {}) => {
   const { role } = useSelector((state: RootState) => state.auth);
   const { sidebarCollapsed } = useSelector((state: RootState) => state.ui);
 
@@ -100,27 +124,11 @@ const AppSidebar = () => {
   return (
     <aside 
       className={cn(
-        "fixed inset-y-0 left-0 z-30 flex flex-col bg-card border-r shadow-sm transition-all",
+        "fixed left-0 z-30 flex flex-col bg-gradient-to-b from-slate-50/80 via-white to-slate-50/80 dark:from-slate-900/80 dark:via-slate-900 dark:to-slate-900/80 border-r border-border/40 shadow-xl backdrop-blur-sm transition-all duration-300",
+        "top-16 bottom-0", // Start below the header (64px = 16 * 0.25rem)
         sidebarCollapsed ? "w-[80px]" : "w-64"
       )}
     >
-      <div className={cn("h-16 flex items-center", 
-        sidebarCollapsed ? "justify-center" : "px-4"
-      )}>
-        {sidebarCollapsed ? (
-          <div className="w-10 h-10 rounded-full flex items-center justify-center bg-ca-blue text-white font-bold">
-            CA
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full flex items-center justify-center bg-ca-blue text-white font-bold">
-              CA
-            </div>
-            <span className="text-xl font-bold text-ca-blue">CA Flow</span>
-          </div>
-        )}
-      </div>
-      <Separator />
       <ScrollArea className="flex-1 px-4 py-6">
         <div className="space-y-5">
           {sidebarCollapsed ? (
@@ -158,6 +166,23 @@ const AppSidebar = () => {
           )}
         </div>
       </ScrollArea>
+      
+      {/* Chat Toggle Button */}
+      {onChatToggle && (
+        <div className="p-4 border-t">
+          <Button
+            variant="outline"
+            onClick={onChatToggle}
+            className={cn(
+              "w-full flex items-center gap-2 transition-all",
+              sidebarCollapsed && "justify-center px-2"
+            )}
+          >
+            <MessageSquare className="h-4 w-4" />
+            {!sidebarCollapsed && <span className="text-sm">Team Chat</span>}
+          </Button>
+        </div>
+      )}
     </aside>
   );
 };

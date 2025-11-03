@@ -1,121 +1,430 @@
-
+import { Button } from "@/components/ui/button";
+import { useState, useEffect } from 'react';
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuLabel, 
+  DropdownMenuSeparator, 
+  DropdownMenuTrigger 
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { GlobalSearch } from '@/components/shared/GlobalSearch';
+import { FadeIn } from "@/components/ui/animations";
+import { toast } from '@/components/ui/enhanced-toast';
+import { NotificationCenter } from '@/components/notifications/NotificationCenter';
+import { useSystemVitals } from '@/hooks/useSystemVitals';
+import StorageWidget from './StorageWidget';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
+import { Line } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Tooltip,
+  Legend,
+  Filler,
+  TimeScale
+} from 'chart.js';
+import { useSettings } from '@/hooks/useSettings';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { Bell, ChevronDown, Menu, MessageSquare, Search, Settings, User } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { logout } from '@/store/slices/authSlice';
+import { toggleSidebar, toggleChatSidebar } from '@/store/slices/uiSlice';
 import { RootState } from '@/store';
-import { toggleSidebar } from '@/store/slices/uiSlice';
-import { GlobalSearch } from '@/components/shared/GlobalSearch';
-import { useToast } from '@/hooks/use-toast';
+import { 
+  ChevronDown, 
+  Menu, 
+  Sparkles, 
+  Settings, 
+  User, 
+  LogOut,
+  Shield,
+  Activity,
+  Cpu,
+  HardDrive
+} from "lucide-react";
 
-const AppHeader = () => {
+interface AppHeaderProps {
+  onAIChatToggle?: () => void;
+}
+
+const AppHeader = ({ onAIChatToggle }: AppHeaderProps = {}) => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { name, role } = useSelector((state: RootState) => state.auth);
-  const { notificationsUnread } = useSelector((state: RootState) => state.ui);
-  const { toast } = useToast();
+  const { name, role, user } = useSelector((state: RootState) => state.auth as any);
+  const { vitals, isLoading: vitalsLoading } = useSystemVitals();
+  const { settings: settingsObj, getSetting } = useSettings({ category: 'company' });
+
+  // Derive brand name and logo from settings with sensible fallbacks
+  const brandName = getSetting('company', 'companyName') || settingsObj?.company?.companyName || 'CA Flow Board';
+  const branding = (getSetting('company', 'branding') || settingsObj?.company?.branding) as any || {};
+  const logoUrl = branding?.logoFile || settingsObj?.company?.invoiceAccounts?.account_1?.branding?.logoFile || '';
+  const [showVitalsModal, setShowVitalsModal] = useState(false);
+  const [cpuHistory, setCpuHistory] = useState<number[]>([]);
 
   const handleLogout = () => {
+    toast.loading('Signing out...');
     dispatch(logout());
-    navigate('/login');
-  };
-
-  const handleNotifications = () => {
-    toast({
-      title: "Notifications",
-      description: "No new notifications at this time.",
-    });
+    setTimeout(() => {
+      toast.success('Successfully signed out');
+      navigate('/login');
+    }, 1000);
   };
 
   const handleMessages = () => {
-    toast({
-      title: "Messages",
-      description: "Coming soon! WhatsApp and SMS integration will be available shortly.",
-    });
+    if (onAIChatToggle) {
+      onAIChatToggle(); // Open AI chatbox
+    } else {
+      dispatch(toggleChatSidebar()); // Fallback to chat sidebar
+    }
+  };
+
+  const getRoleBadgeColor = (role: string) => {
+    switch (role) {
+      case 'owner': return 'bg-purple-100 text-purple-800 border-purple-200';
+      case 'admin': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'employee': return 'bg-green-100 text-green-800 border-green-200';
+      case 'client': return 'bg-orange-100 text-orange-800 border-orange-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
+  };
+
+  // register chart components
+  ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, Filler, TimeScale);
+
+  // maintain a small rolling history of CPU load for the chart
+  useEffect(() => {
+    if (!vitals) return;
+    const raw = vitals.cpu?.load;
+    let val = NaN;
+    if (typeof raw === 'string') {
+      val = parseFloat(raw.replace('%', '').trim());
+    } else if (typeof raw === 'number') {
+      val = raw;
+    }
+    if (Number.isFinite(val)) {
+      setCpuHistory(prev => {
+        const next = [...prev, val].slice(-30);
+        return next;
+      });
+    }
+  }, [vitals]);
+
+  const inferStatus = () => {
+    if (!vitals) return { level: 'unknown', message: 'Vitals unavailable' };
+    const cpuRaw = vitals.cpu?.load;
+    const memRaw = vitals.memory?.usage;
+    const cpu = typeof cpuRaw === 'string' ? parseFloat(cpuRaw.replace('%','')) : Number(cpuRaw || NaN);
+    const mem = typeof memRaw === 'string' ? parseFloat(memRaw.replace('%','')) : Number(memRaw || NaN);
+
+    if ((cpu && cpu > 85) || (mem && mem > 90)) {
+      return { level: 'critical', message: 'High load — investigate background jobs or memory leaks' };
+    }
+    if ((cpu && cpu > 70) || (mem && mem > 75)) {
+      return { level: 'warning', message: 'Moderate load — monitor recent spikes' };
+    }
+    return { level: 'healthy', message: 'System performing normally' };
+  };
+
+  const status = inferStatus();
+
+  // Ensure percent string always ends with % for CSS width
+  const toPercentString = (val: string | number | undefined) => {
+    if (val === undefined || val === null) return '0%';
+    const s = String(val).trim();
+    return s.endsWith('%') ? s : `${s}%`;
   };
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b bg-card">
-      <div className="container flex h-16 items-center justify-between py-4">
-        <div className="flex items-center">
-          <Button variant="ghost" size="icon" onClick={() => dispatch(toggleSidebar())}>
-            <Menu className="h-6 w-6" />
-          </Button>
-          <h2 className="text-2xl font-bold text-ca-blue ml-4">CA Flow</h2>
-        </div>
-        
-        <div className="hidden md:block lg:w-[400px]">
-          <GlobalSearch />
-        </div>
-        
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" className="relative" onClick={handleNotifications}>
-            <Bell className="h-5 w-5" />
-            {notificationsUnread > 0 && (
-              <span className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-ca-red text-[10px] text-white">
-                {notificationsUnread}
-              </span>
-            )}
-          </Button>
-          
-          <Button variant="ghost" size="icon" onClick={handleMessages}>
-            <MessageSquare className="h-5 w-5" />
-          </Button>
-          
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="flex items-center gap-2 pl-1">
-                <Avatar className="h-8 w-8">
-                  <AvatarImage src="" />
-                  <AvatarFallback className="bg-ca-blue-light text-white">
-                    {name?.charAt(0) || 'U'}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex items-center">
-                  <div className="hidden md:block text-sm font-medium mr-1">
-                    {name || 'User'}
+    <FadeIn>
+      <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 shadow-lg">
+        <div className="container flex h-16 items-center justify-between py-4">
+          {/* Left Section */}
+          <div className="flex items-center space-x-4">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => dispatch(toggleSidebar())}
+              className="hover:bg-ca-blue/10 transition-colors"
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+            
+            <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-3">
+                {logoUrl ? (
+                  <img src={logoUrl} alt={`${brandName} logo`} className="h-8 w-8 rounded-md object-contain" />
+                ) : (
+                  <div className="p-2 bg-gradient-to-br from-ca-blue to-blue-600 rounded-xl shadow-md">
+                    <Shield className="h-6 w-6 text-white" />
                   </div>
-                  <ChevronDown className="h-4 w-4" />
+                )}
+
+                <div className="hidden sm:block">
+                  <h1 className="text-xl font-bold bg-gradient-to-r from-ca-blue to-blue-600 bg-clip-text text-transparent">
+                    {brandName}
+                  </h1>
+                  <p className="text-xs text-gray-500 -mt-1">Intelligent Workflow</p>
                 </div>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">{name}</p>
-                  <p className="text-xs leading-none text-muted-foreground">
-                    {role?.charAt(0).toUpperCase() + role?.slice(1) || 'User'}
-                  </p>
+              </div>
+            </div>
+          </div>
+          
+          {/* Center Section - Search */}
+          <div className="hidden md:block flex-1 max-w-md mx-8">
+            <GlobalSearch />
+          </div>
+          
+          {/* Right Section */}
+          <div className="flex items-center space-x-2">
+            {/* Storage Widget */}
+            <div className="hidden lg:block">
+              <StorageWidget />
+            </div>
+            
+            {/* System Vitals */}
+            <div
+              className="hidden lg:flex items-center space-x-2 px-3 py-1.5 bg-blue-50 rounded-lg border border-blue-200 cursor-pointer"
+              onClick={() => setShowVitalsModal(true)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter') setShowVitalsModal(true); }}
+            >
+              {vitalsLoading ? (
+                <>
+                  <Activity className="h-4 w-4 text-blue-600 animate-pulse" />
+                  <span className="text-xs font-medium text-blue-700">Loading...</span>
+                </>
+              ) : vitals ? (
+                <>
+                  <div className="flex items-center space-x-1">
+                    <Cpu className="h-3 w-3 text-blue-600" />
+                    <span className="text-xs font-medium text-blue-700">{vitals.cpu?.load || 'N/A'}</span>
+                  </div>
+                  <div className="w-px h-4 bg-blue-300" />
+                  <div className="flex items-center space-x-1">
+                    <HardDrive className="h-3 w-3 text-blue-600" />
+                    <span className="text-xs font-medium text-blue-700">{vitals.memory?.usage || 'N/A'}</span>
+                  </div>
+                  <div className="w-px h-4 bg-blue-300" />
+                  <div className="flex items-center space-x-1">
+                    <Activity className="h-3 w-3 text-green-600" />
+                    <span className="text-xs font-medium text-green-700">
+                      {vitals.uptime ? `${Math.floor(vitals.uptime / 3600)}h` : 'N/A'}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Activity className="h-4 w-4 text-red-600" />
+                  <span className="text-xs font-medium text-red-700">Offline</span>
+                </>
+              )}
+            </div>
+            
+            {/* Notifications */}
+            <NotificationCenter />
+            
+            {/* AI Assistant Button with Magical Sparkle Effect */}
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={handleMessages}
+              className="relative hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 transition-all group"
+              title="AI Assistant"
+            >
+              <Sparkles className="h-5 w-5 text-purple-600 group-hover:text-blue-600 transition-colors" />
+              {/* Magical glow effect */}
+              <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-gradient-to-r from-purple-400 to-blue-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-gradient-to-r from-purple-500 to-blue-500"></span>
+              </span>
+              {/* Additional sparkles */}
+              <span className="absolute top-0 left-0 w-1 h-1 bg-purple-400 rounded-full animate-sparkle-1 opacity-0"></span>
+              <span className="absolute bottom-1 right-0 w-1 h-1 bg-blue-400 rounded-full animate-sparkle-2 opacity-0"></span>
+            </Button>
+            
+            {/* User Menu */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="flex items-center space-x-3 pl-2 pr-3 py-2 hover:bg-gray-100 transition-colors rounded-lg">
+                  <Avatar className="h-9 w-9 ring-2 ring-ca-blue/20">
+                    <AvatarImage src={user?.avatar || ''} />
+                    <AvatarFallback className="bg-gradient-to-br from-ca-blue to-blue-600 text-white font-semibold">
+                      {name?.charAt(0)?.toUpperCase() || 'U'}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="hidden md:flex flex-col items-start">
+                    <span className="text-sm font-medium">{name || 'User'}</span>
+                    <Badge className={`text-xs ${getRoleBadgeColor(role || '')}`}>
+                      {role?.charAt(0).toUpperCase() + role?.slice(1) || 'User'}
+                    </Badge>
+                  </div>
+                  <ChevronDown className="h-4 w-4 text-gray-500" />
+                </Button>
+              </DropdownMenuTrigger>
+              
+              <DropdownMenuContent align="end" className="w-64 p-2">
+                <DropdownMenuLabel className="p-3">
+                  <div className="flex items-center space-x-3">
+                    <Avatar className="h-12 w-12">
+                      <AvatarImage src="" />
+                      <AvatarFallback className="bg-gradient-to-br from-ca-blue to-blue-600 text-white font-semibold text-lg">
+                        {name?.charAt(0)?.toUpperCase() || 'U'}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex flex-col">
+                      <p className="text-sm font-semibold">{name}</p>
+                      <Badge className={`text-xs w-fit ${getRoleBadgeColor(role || '')}`}>
+                        {role?.charAt(0).toUpperCase() + role?.slice(1) || 'User'}
+                      </Badge>
+                    </div>
+                  </div>
+                </DropdownMenuLabel>
+                
+                <DropdownMenuSeparator />
+                
+                <DropdownMenuItem className="p-3 focus:bg-gray-50 rounded-md">
+                  <User className="mr-3 h-4 w-4" />
+                  <span>Profile & Account</span>
+                </DropdownMenuItem>
+                
+                <DropdownMenuItem className="p-3 focus:bg-gray-50 rounded-md">
+                  <Settings className="mr-3 h-4 w-4" />
+                  <span>Settings & Preferences</span>
+                </DropdownMenuItem>
+                
+                <DropdownMenuSeparator />
+                
+                <DropdownMenuItem 
+                  onClick={handleLogout}
+                  className="p-3 focus:bg-red-50 rounded-md text-red-600 focus:text-red-700"
+                >
+                  <LogOut className="mr-3 h-4 w-4" />
+                  <span>Sign Out</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+          {/* Vitals Modal */}
+          <Dialog open={showVitalsModal} onOpenChange={setShowVitalsModal}>
+            <DialogContent className="max-h-[90vh] flex flex-col max-w-4xl">
+              <DialogHeader className="px-6 pt-6 pb-6">
+                <DialogTitle>System Vitals — Real-time</DialogTitle>
+              </DialogHeader>
+              <div className="flex-1 overflow-y-auto min-h-0 px-6 pb-6">
+                <div className="mb-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${status.level === 'critical' ? 'bg-red-100 text-red-800' : status.level === 'warning' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
+                      {status.level === 'critical' ? 'Critical' : status.level === 'warning' ? 'Warning' : 'Healthy'}
+                    </span>
+                    <div className="text-sm text-gray-700">{status.message}</div>
+                  </div>
                 </div>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>
-                <User className="mr-2 h-4 w-4" />
-                <span>Profile</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Settings className="mr-2 h-4 w-4" />
-                <span>Settings</span>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleLogout}>
-                <span className="text-ca-red">Logout</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+
+                {vitalsLoading ? (
+                  <p className="text-sm text-muted-foreground">Loading vitals...</p>
+                ) : vitals ? (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-semibold">CPU</h4>
+                        <span className="text-xs text-muted-foreground">Load: {vitals.cpu?.load || 'N/A'}</span>
+                      </div>
+                      <div className="h-32">
+                        <Line
+                          data={{
+                            labels: cpuHistory.map((_, i) => i + 1),
+                            datasets: [
+                              {
+                                label: 'CPU %',
+                                data: cpuHistory,
+                                fill: true,
+                                backgroundColor: 'rgba(59,130,246,0.12)',
+                                borderColor: 'rgba(59,130,246,0.9)',
+                                tension: 0.3,
+                                pointRadius: 0
+                              }
+                            ]
+                          }}
+                          options={{
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                              x: { display: false },
+                              y: { display: true, suggestedMin: 0, suggestedMax: 100 }
+                            },
+                            plugins: { legend: { display: false }, tooltip: { enabled: true } }
+                          }}
+                        />
+                      </div>
+                      <div className="grid grid-cols-3 gap-3 text-xs">
+                        <div className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-blue-500" />User: {vitals.cpu?.user ?? 'N/A'}</div>
+                        <div className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-indigo-500" />System: {vitals.cpu?.system ?? 'N/A'}</div>
+                        <div className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-gray-400" />Idle: {vitals.cpu?.idle ?? 'N/A'}</div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-semibold">Memory</h4>
+                        <span className="text-xs text-muted-foreground">Usage: {vitals.memory?.usage || 'N/A'}</span>
+                      </div>
+                      <div className="rounded border p-3 bg-white">
+                        <div className="text-xs text-muted-foreground">Used: <span className="font-medium text-gray-900">{vitals.memory?.used || 'N/A'}</span> / <span className="font-medium text-gray-900">{vitals.memory?.total || 'N/A'}</span></div>
+                        <div className="mt-2 h-2 bg-gray-100 rounded overflow-hidden">
+                          <div className="h-full bg-blue-500" style={{ width: toPercentString(vitals.memory?.usage as any) }} />
+                        </div>
+                      </div>
+
+                      <div>
+                        <h4 className="text-sm font-semibold">Uptime</h4>
+                        <p className="text-xs text-muted-foreground">{vitals.uptime ? `${Math.floor(vitals.uptime/3600)}h ${Math.floor((vitals.uptime%3600)/60)}m` : 'N/A'}</p>
+                        <p className="text-xs mt-1">Restart frequency can indicate instability; monitor if uptime is low or fluctuating.</p>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="rounded border p-3 bg-white">
+                          <h4 className="text-sm font-semibold">Threads</h4>
+                          <div className="text-sm font-medium text-gray-900">{(vitals as any)?.threads ?? (vitals as any)?.threadCount ?? 'N/A'}</div>
+                          <p className="text-xs text-muted-foreground mt-1">Active thread count on the host</p>
+                        </div>
+
+                        <div className="rounded border p-3 bg-white">
+                          <h4 className="text-sm font-semibold">Processes</h4>
+                          <div className="text-sm font-medium text-gray-900">{(vitals as any)?.processes ?? (vitals as any)?.processCount ?? 'N/A'}</div>
+                          <p className="text-xs text-muted-foreground mt-1">Number of running processes</p>
+                        </div>
+                      </div>
+
+                      <div className="rounded border p-3 bg-white mt-3">
+                        <h4 className="text-sm font-semibold mb-2">Load Average</h4>
+                        <div className="grid grid-cols-3 gap-3 text-xs">
+                          <div>1m: <span className="font-medium text-gray-900">{vitals.loadAverages?.oneMin ?? 'N/A'}</span></div>
+                          <div>5m: <span className="font-medium text-gray-900">{vitals.loadAverages?.fiveMin ?? 'N/A'}</span></div>
+                          <div>15m: <span className="font-medium text-gray-900">{vitals.loadAverages?.fifteenMin ?? 'N/A'}</span></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-red-600">Vitals unavailable (offline)</p>
+                )}
+              </div>
+              <DialogFooter>
+                <div className="flex justify-end">
+                  <Button onClick={() => setShowVitalsModal(false)}>Close</Button>
+                </div>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
-      </div>
-    </header>
+      </header>
+    </FadeIn>
   );
 };
 

@@ -261,13 +261,13 @@ export const ExcelManager = ({
         sampleData.push(['', 'Sample Task', 'Task description', 'todo', 'medium', 'GST', 'Client Name', '', '', '', '']);
         break;
       case 'clients':
-        sampleData.push(['', 'ABC Company', 'contact@abc.com', '+91 9876543210', '123 Business Street', 'John Doe', '27ABCDE1234F1Z5', 'ABCDE1234F', 'Private Limited', 'Technology', 'active']);
+        sampleData.push(['', 'ABC Company', 'contact@abc.com', '+91 0000000000', '123 Business Street', 'Contact Person', '22ABCDE1234F1Z5', 'ABCDE1234F', 'Private Limited', 'Technology', 'active']);
         break;
       case 'employees':
-        sampleData.push(['', 'EMP001', 'John Smith', 'john@company.com', 'Accounts', 'Senior Accountant', '50000', '2024-01-15', 'active']);
+        sampleData.push(['', 'EMP001', 'Employee Name', 'employee@company.com', 'Accounts', 'Senior Accountant', '50000', '2025-01-15', 'active']);
         break;
       case 'invoices':
-        sampleData.push(['', 'INV-2024-001', 'ABC Company', '10000', '1800', '11800', 'paid', '2024-01-15', '2024-02-15', '2024-02-10']);
+        sampleData.push(['', 'INV-2025-001', 'ABC Company', '10000', '1800', '11800', 'paid', '2025-01-15', '2025-02-15', '2025-02-10']);
         break;
     }
     

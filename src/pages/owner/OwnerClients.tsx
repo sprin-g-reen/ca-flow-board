@@ -1,6 +1,9 @@
 
 import { useState } from 'react';
-import { Search, Plus, Download, Upload, Eye, Edit, Trash2 } from 'lucide-react';
+import { Search, Plus, Download, Upload, Eye, Edit, Trash2, Trash, Archive, Check, X } from 'lucide-react';
+import Swal from 'sweetalert2';
+import * as XLSX from 'xlsx';
+import { saveAs } from 'file-saver';
 import {
   Card,
   CardContent,
@@ -11,6 +14,14 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -22,14 +33,40 @@ import {
 import { FormDialog } from '@/components/shared/FormDialog';
 import { AddClientForm } from '@/components/forms/AddClientForm';
 import { ClientDetailView } from '@/components/clients/ClientDetailView';
+import { BulkGSTImport } from '@/components/clients/BulkGSTImport';
+import { BulkCINImport } from '@/components/clients/BulkCINImport';
+import { ImportOptionsModal } from '@/components/clients/ImportOptionsModal';
 import { useClients } from '@/hooks/useClients';
 import { toast } from 'sonner';
 
 const OwnerClients = () => {
   const [showAddClient, setShowAddClient] = useState(false);
+  const [showEditClient, setShowEditClient] = useState(false);
   const [selectedClient, setSelectedClient] = useState(null);
+  const [editingClient, setEditingClient] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const { clients, isLoading, error, deleteClient } = useClients();
+  const [showBulkGSTImport, setShowBulkGSTImport] = useState(false);
+  const [showBulkCINImport, setShowBulkCINImport] = useState(false);
+  const [showImportOptions, setShowImportOptions] = useState(false);
+  
+  // Bulk selection state
+  const [selectedClients, setSelectedClients] = useState<string[]>([]);
+  const [bulkAction, setBulkAction] = useState<string>('');
+  
+  const { 
+    clients, 
+    isLoading, 
+    error, 
+    deleteClient, 
+    bulkImportClients, 
+    bulkDeleteClients,
+    bulkUpdateClientStatus,
+    bulkArchiveClients,
+    isImporting,
+    isBulkDeleting,
+    isBulkUpdatingStatus,
+    isBulkArchiving
+  } = useClients();
 
   const handleOpenAddClientModal = () => {
     setShowAddClient(true);
@@ -39,13 +76,139 @@ const OwnerClients = () => {
     setShowAddClient(false);
   };
 
+  // Bulk selection handlers
+  const handleSelectClient = (clientId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedClients(prev => [...prev, clientId]);
+    } else {
+      setSelectedClients(prev => prev.filter(id => id !== clientId));
+    }
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedClients(filteredClients.map(client => client.id));
+    } else {
+      setSelectedClients([]);
+    }
+  };
+
+  const handleBulkAction = async (action: string) => {
+    if (selectedClients.length === 0) {
+      toast.error('Please select clients first');
+      return;
+    }
+
+    const selectedCount = selectedClients.length;
+    let confirmTitle = '';
+    let confirmText = '';
+    let confirmAction = '';
+
+    switch (action) {
+      case 'delete':
+        confirmTitle = 'Delete Clients';
+        confirmText = `Are you sure you want to delete ${selectedCount} selected clients? This action cannot be undone.`;
+        confirmAction = 'Yes, Delete';
+        break;
+      case 'activate':
+        confirmTitle = 'Activate Clients';
+        confirmText = `Set ${selectedCount} selected clients to Active status?`;
+        confirmAction = 'Yes, Activate';
+        break;
+      case 'deactivate':
+        confirmTitle = 'Deactivate Clients';
+        confirmText = `Set ${selectedCount} selected clients to Inactive status?`;
+        confirmAction = 'Yes, Deactivate';
+        break;
+      case 'archive':
+        confirmTitle = 'Archive Clients';
+        confirmText = `Archive ${selectedCount} selected clients?`;
+        confirmAction = 'Yes, Archive';
+        break;
+      default:
+        return;
+    }
+
+    const result = await Swal.fire({
+      title: confirmTitle,
+      text: confirmText,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: action === 'delete' ? '#ef4444' : '#10b981',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: confirmAction,
+      cancelButtonText: 'Cancel',
+      reverseButtons: true
+    });
+
+    if (result.isConfirmed) {
+      try {
+        switch (action) {
+          case 'delete':
+            await bulkDeleteClients(selectedClients);
+            break;
+          case 'activate':
+            await bulkUpdateClientStatus({ clientIds: selectedClients, status: 'active' });
+            break;
+          case 'deactivate':
+            await bulkUpdateClientStatus({ clientIds: selectedClients, status: 'inactive' });
+            break;
+          case 'archive':
+            await bulkArchiveClients({ clientIds: selectedClients, archived: true });
+            break;
+        }
+        setSelectedClients([]);
+        setBulkAction('');
+      } catch (error) {
+        console.error('Bulk action error:', error);
+      }
+    }
+  };
+
   const handleViewClient = (client) => {
     setSelectedClient(client);
   };
 
-  const handleDeleteClient = (clientId: string) => {
-    if (confirm('Are you sure you want to delete this client?')) {
-      deleteClient(clientId);
+  const handleEditClient = (client) => {
+    setEditingClient(client);
+    setShowEditClient(true);
+  };
+
+  const handleCloseEditClientModal = () => {
+    setShowEditClient(false);
+    setEditingClient(null);
+  };
+
+  const handleDeleteClient = async (client) => {
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: `You are about to delete "${client.name}". This action cannot be undone!`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Yes, delete it!',
+      cancelButtonText: 'Cancel',
+      reverseButtons: true
+    });
+
+    if (result.isConfirmed) {
+      try {
+        deleteClient(client.id);
+        Swal.fire({
+          title: 'Deleted!',
+          text: `${client.name} has been deleted successfully.`,
+          icon: 'success',
+          confirmButtonColor: '#10b981'
+        });
+      } catch (error) {
+        Swal.fire({
+          title: 'Error!',
+          text: 'Failed to delete the client. Please try again.',
+          icon: 'error',
+          confirmButtonColor: '#ef4444'
+        });
+      }
     }
   };
 
@@ -91,6 +254,146 @@ const OwnerClients = () => {
     }
   };
 
+  const handleImportClients = async () => {
+    setShowImportOptions(true);
+  };
+
+  const handleUploadExcel = () => {
+    setShowImportOptions(false);
+    // Upload Excel file
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx,.xls';
+    input.onchange = (e) => handleExcelUpload(e as any);
+    input.click();
+  };
+
+  const downloadExcelTemplate = () => {
+    const templateData = [{
+      client_code: 'CLI001',
+      name: 'Sample Client Name',
+      contact_person: 'Contact Person',
+      email: 'client@company.com',
+      phone: '+91 0000000000',
+      business_type: 'Private Limited',
+      industry: 'Technology',
+      gst_number: '22AAAAA0000A1Z5',
+      pan_number: 'AAAAA0000A',
+      address: '123 Business Street, City, State - 400001',
+      status: 'Active',
+      payment_terms: '30 days',
+      credit_limit: '100000'
+    }];
+
+    const worksheet = XLSX.utils.json_to_sheet(templateData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Clients Template');
+    
+    // Auto-size columns
+    const cols = Object.keys(templateData[0]).map(() => ({ width: 20 }));
+    worksheet['!cols'] = cols;
+    
+    const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    saveAs(blob, `clients-import-template-${new Date().toISOString().split('T')[0]}.xlsx`);
+    
+    toast.success('Excel template downloaded successfully');
+  };
+
+  const handleExcelUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: 'array' });
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet) as Array<Record<string, any>>;
+
+      if (jsonData.length === 0) {
+        toast.error('Excel file is empty');
+        return;
+      }
+
+      // Validate and process the data
+      const validClients: any[] = [];
+      const errors: string[] = [];
+
+      jsonData.forEach((row, index) => {
+        const rowNumber = index + 2; // Excel row number (accounting for header)
+        
+        if (!row.name) {
+          errors.push(`Row ${rowNumber}: Client name is required`);
+          return;
+        }
+
+        if (row.email && !isValidEmail(row.email)) {
+          errors.push(`Row ${rowNumber}: Invalid email format`);
+          return;
+        }
+
+        if (row.gst_number && !isValidGST(row.gst_number)) {
+          errors.push(`Row ${rowNumber}: Invalid GST number format`);
+          return;
+        }
+
+        validClients.push({
+          client_code: row.client_code || '',
+          name: row.name,
+          contact_person: row.contact_person || '',
+          email: row.email || '',
+          phone: row.phone || '',
+          business_type: row.business_type || '',
+          industry: row.industry || '',
+          gst_number: row.gst_number || '',
+          pan_number: row.pan_number || '',
+          address: row.address || '',
+          status: row.status || 'Active',
+          payment_terms: row.payment_terms || '',
+          credit_limit: row.credit_limit || ''
+        });
+      });
+
+      if (errors.length > 0) {
+        Swal.fire({
+          title: 'Validation Errors',
+          html: `<div class="text-left"><ul>${errors.map(error => `<li>${error}</li>`).join('')}</ul></div>`,
+          icon: 'error',
+          confirmButtonColor: '#ef4444'
+        });
+        return;
+      }
+
+      // Confirm import
+      const confirmResult = await Swal.fire({
+        title: 'Confirm Import',
+        text: `Ready to import ${validClients.length} clients. Continue?`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Yes, Import',
+        cancelButtonText: 'Cancel',
+        confirmButtonColor: '#10b981',
+        cancelButtonColor: '#6b7280'
+      });
+
+      if (confirmResult.isConfirmed) {
+        bulkImportClients(validClients);
+      }
+
+    } catch (error) {
+      toast.error('Failed to process Excel file');
+      console.error('Excel upload error:', error);
+    }
+  };
+
+  const isValidEmail = (email) => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  };
+
+  const isValidGST = (gst) => {
+    return /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(gst);
+  };
+
   if (isLoading) {
     return (
       <div className="p-6 flex items-center justify-center">
@@ -124,7 +427,7 @@ const OwnerClients = () => {
   const filteredResults = filteredClients.length;
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 max-w-full overflow-x-hidden">
       <Card>
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl">Client Management</CardTitle>
@@ -132,9 +435,9 @@ const OwnerClients = () => {
             Manage your firm's clients with comprehensive information and communication tracking
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="flex justify-between items-center mb-6">
-            <div className="relative w-96">
+        <CardContent className="overflow-x-hidden">
+          <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
+            <div className="relative flex-1 min-w-[300px] max-w-md">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input 
                 placeholder="Search clients by name, code, email, phone, or business type..." 
@@ -154,7 +457,7 @@ const OwnerClients = () => {
               </Button>
               <Button 
                 variant="outline"
-                disabled
+                onClick={handleImportClients}
               >
                 <Upload className="mr-2 h-4 w-4" />
                 Import
@@ -168,6 +471,54 @@ const OwnerClients = () => {
               </Button>
             </div>
           </div>
+
+          {/* Bulk Action Toolbar */}
+          {selectedClients.length > 0 && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <span className="text-blue-800 font-medium">
+                  {selectedClients.length} client{selectedClients.length !== 1 ? 's' : ''} selected
+                </span>
+                <div className="flex items-center gap-2">
+                  <Select value={bulkAction} onValueChange={setBulkAction}>
+                    <SelectTrigger className="w-48">
+                      <SelectValue placeholder="Choose action..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="activate">Set Active</SelectItem>
+                      <SelectItem value="deactivate">Set Inactive</SelectItem>
+                      <SelectItem value="archive">Archive</SelectItem>
+                      <SelectItem value="delete">Delete</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button 
+                    onClick={() => handleBulkAction(bulkAction)}
+                    disabled={!bulkAction || isBulkDeleting || isBulkUpdatingStatus || isBulkArchiving}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    {(isBulkDeleting || isBulkUpdatingStatus || isBulkArchiving) ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    ) : (
+                      <Check className="mr-2 h-4 w-4" />
+                    )}
+                    Apply
+                  </Button>
+                </div>
+              </div>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => {
+                  setSelectedClients([]);
+                  setBulkAction('');
+                }}
+                className="text-blue-600 hover:text-blue-800"
+              >
+                <X className="mr-2 h-4 w-4" />
+                Clear Selection
+              </Button>
+            </div>
+          )}
 
           {/* Enhanced Statistics Cards */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
@@ -213,76 +564,123 @@ const OwnerClients = () => {
               </CardContent>
             </Card>
           ) : (
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Client Code</TableHead>
-                    <TableHead>Company Name</TableHead>
-                    <TableHead>Contact Person</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Phone</TableHead>
-                    <TableHead>Business Type</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>GST</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredClients.map((client) => (
-                    <TableRow key={client.id}>
-                      <TableCell className="font-medium">
-                        <Badge variant="outline">{client.client_code}</Badge>
-                      </TableCell>
-                      <TableCell className="font-medium">{client.name}</TableCell>
-                      <TableCell>{client.contact_person || 'N/A'}</TableCell>
-                      <TableCell>{client.email || 'No email'}</TableCell>
-                      <TableCell>{client.phone || 'No phone'}</TableCell>
-                      <TableCell>{client.business_type || 'N/A'}</TableCell>
-                      <TableCell>
-                        <Badge 
-                          className={
-                            client.status === 'active' 
-                              ? 'bg-green-100 text-green-800' 
-                              : 'bg-red-100 text-red-800'
+            <div className="rounded-md border overflow-hidden">
+              <div className="w-full overflow-x-auto">
+                <Table className="w-full">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[3%] min-w-[50px]">
+                        <Checkbox
+                          checked={
+                            filteredClients.length > 0 && 
+                            selectedClients.length === filteredClients.length
                           }
-                        >
-                          {client.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {client.gst_number ? (
-                          <Badge className="bg-blue-100 text-blue-800">Yes</Badge>
-                        ) : (
-                          <Badge variant="outline">No</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={() => handleViewClient(client)}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="sm">
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={() => handleDeleteClient(client.id)}
-                            className="text-red-600 hover:text-red-800"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
+                          onCheckedChange={handleSelectAll}
+                          aria-label="Select all clients"
+                        />
+                      </TableHead>
+                      <TableHead className="w-[8%] min-w-[80px]">Code</TableHead>
+                      <TableHead className="w-[15%] min-w-[120px]">Company Name</TableHead>
+                      <TableHead className="w-[12%] min-w-[100px]">Contact Person</TableHead>
+                      <TableHead className="w-[15%] min-w-[120px]">Email</TableHead>
+                      <TableHead className="w-[10%] min-w-[100px]">Phone</TableHead>
+                      <TableHead className="w-[12%] min-w-[100px]">Business Type</TableHead>
+                      <TableHead className="w-[8%] min-w-[80px]">Status</TableHead>
+                      <TableHead className="w-[7%] min-w-[60px]">GST</TableHead>
+                      <TableHead className="w-[10%] min-w-[100px] text-right">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredClients.map((client) => (
+                      <TableRow key={client.id}>
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedClients.includes(client.id)}
+                            onCheckedChange={(checked) => handleSelectClient(client.id, checked as boolean)}
+                            aria-label={`Select ${client.name}`}
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          <Badge variant="outline" className="text-xs whitespace-nowrap">{client.client_code}</Badge>
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          <div className="truncate max-w-[150px]" title={client.name}>
+                            {client.name}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="truncate max-w-[120px]" title={client.contact_person || 'N/A'}>
+                            {client.contact_person || 'N/A'}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="truncate max-w-[150px]" title={client.email || 'No email'}>
+                            {client.email || 'No email'}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="truncate max-w-[100px]" title={client.phone || 'No phone'}>
+                            {client.phone || 'No phone'}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="truncate max-w-[100px]" title={client.business_type || 'N/A'}>
+                            {client.business_type || 'N/A'}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge 
+                            className={
+                              client.status === 'active' 
+                                ? 'bg-green-100 text-green-800 text-xs whitespace-nowrap' 
+                                : 'bg-red-100 text-red-800 text-xs whitespace-nowrap'
+                            }
+                          >
+                            {client.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {client.gst_number ? (
+                            <Badge className="bg-blue-100 text-blue-800 text-xs whitespace-nowrap">Yes</Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-xs whitespace-nowrap">No</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1">
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => handleViewClient(client)}
+                              title="View Client Details"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => handleEditClient(client)}
+                              title="Edit Client"
+                              className="text-blue-600 hover:text-blue-800"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => handleDeleteClient(client)}
+                              title="Delete Client"
+                              className="text-red-600 hover:text-red-800"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
           )}
           
@@ -296,12 +694,58 @@ const OwnerClients = () => {
             <AddClientForm onSuccess={handleCloseAddClientModal} />
           </FormDialog>
 
+          <FormDialog
+            open={showEditClient}
+            onOpenChange={handleCloseEditClientModal}
+            title="Edit Client"
+            description="Update client information and details"
+            showFooter={false}
+          >
+            {editingClient && (
+              <AddClientForm 
+                onSuccess={handleCloseEditClientModal}
+                initialData={editingClient}
+                isEditing={true}
+              />
+            )}
+          </FormDialog>
+
           {selectedClient && (
             <ClientDetailView
               client={selectedClient}
               onClose={() => setSelectedClient(null)}
             />
           )}
+
+          <BulkGSTImport
+            isOpen={showBulkGSTImport}
+            onClose={() => setShowBulkGSTImport(false)}
+            onImport={bulkImportClients}
+          />
+
+          <BulkCINImport
+            isOpen={showBulkCINImport}
+            onClose={() => setShowBulkCINImport(false)}
+            onImport={bulkImportClients}
+          />
+
+          <ImportOptionsModal
+            isOpen={showImportOptions}
+            onClose={() => setShowImportOptions(false)}
+            onDownloadTemplate={() => {
+              setShowImportOptions(false);
+              downloadExcelTemplate();
+            }}
+            onBulkGSTImport={() => {
+              setShowImportOptions(false);
+              setShowBulkGSTImport(true);
+            }}
+            onBulkCINImport={() => {
+              setShowImportOptions(false);
+              setShowBulkCINImport(true);
+            }}
+            onUploadExcel={handleUploadExcel}
+          />
         </CardContent>
       </Card>
     </div>

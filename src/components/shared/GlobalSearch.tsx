@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Search, Filter, FileText, Users, CreditCard } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -19,8 +19,32 @@ export const GlobalSearch = () => {
     hasResults 
   } = useSearch();
 
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  // Close the expanded search when clicking outside or pressing Escape
+  useEffect(() => {
+    const onDocMouse = (e: MouseEvent) => {
+      if (!containerRef.current) return;
+      if (!containerRef.current.contains(e.target as Node)) {
+        setIsExpanded(false);
+      }
+    };
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsExpanded(false);
+    };
+
+    document.addEventListener('mousedown', onDocMouse);
+    document.addEventListener('keydown', onKey);
+
+    return () => {
+      document.removeEventListener('mousedown', onDocMouse);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, []);
+
   return (
-    <div className="relative">
+  <div className="relative" ref={containerRef}>
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />

@@ -1,6 +1,5 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 
 export interface TaskTemplate {
   id: string;
@@ -20,6 +19,11 @@ export interface TaskTemplate {
   created_at: string;
   updated_at: string;
   is_deleted?: boolean;
+  is_active?: boolean;
+  usage_count?: number;
+  estimated_hours?: number;
+  complexity?: 'simple' | 'medium' | 'complex';
+  tags?: string[];
 }
 
 export interface CreateTemplateData {
@@ -35,50 +39,85 @@ export interface CreateTemplateData {
   payable_task_type?: 'payable_task_1' | 'payable_task_2';
   assigned_employee_id?: string;
   client_id?: string;
+  estimated_hours?: number;
+  complexity?: 'simple' | 'medium' | 'complex';
+  tags?: string[];
 }
+
+const API_BASE_URL = 'http://localhost:3001/api';
+
+import { getValidatedToken } from '@/lib/auth';
+
+// Helper function to make authenticated API calls
+const makeAuthenticatedRequest = async (url: string, options: RequestInit = {}) => {
+  const token = getValidatedToken();
+  if (!token) {
+    throw new Error('Authentication token not found');
+  }
+
+  const response = await fetch(`${API_BASE_URL}${url}`, {
+    ...options,
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+  }
+
+  return response.json();
+};
 
 export const useTemplates = () => {
   const queryClient = useQueryClient();
 
-  const { data: templates = [], isLoading, error } = useQuery({
+  const { data: templatesResponse, isLoading, error } = useQuery({
     queryKey: ['templates'],
     queryFn: async () => {
-      console.log('Fetching templates from database...');
+      console.log('Fetching templates from backend API...');
       
-      // Direct query to task_templates table
-      const { data, error } = await supabase
-        .from('task_templates')
-        .select('*')
-        .eq('is_deleted', false)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Error fetching templates:', error);
-        throw error;
-      }
-
-      console.log('Fetched templates:', data);
-      return data as TaskTemplate[];
+      const response = await makeAuthenticatedRequest('/templates');
+      console.log('Templates API response:', response);
+      
+      return response;
     },
   });
+
+  // Query for a single template (for editing)
+  const useTemplate = (templateId: string | null) => {
+    return useQuery({
+      queryKey: ['template', templateId],
+      queryFn: async () => {
+        if (!templateId) return null;
+        console.log('Fetching template:', templateId);
+        
+        const response = await makeAuthenticatedRequest(`/templates/${templateId}`);
+        console.log('Template API response:', response);
+        
+        return response.data;
+      },
+      enabled: !!templateId,
+    });
+  };
+
+  // Extract templates from the response data
+  const templates = templatesResponse?.data || [];
 
   const createTemplate = useMutation({
     mutationFn: async (templateData: CreateTemplateData) => {
       console.log('Creating template:', templateData);
       
-      const { data, error } = await supabase
-        .from('task_templates')
-        .insert(templateData)
-        .select()
-        .single();
+      const response = await makeAuthenticatedRequest('/templates', {
+        method: 'POST',
+        body: JSON.stringify(templateData),
+      });
 
-      if (error) {
-        console.error('Error creating template:', error);
-        throw error;
-      }
-
-      console.log('Template created successfully:', data);
-      return data;
+      console.log('Template created successfully:', response);
+      return response.data;
     },
     onSuccess: () => {
       console.log('Invalidating templates query...');
@@ -90,20 +129,13 @@ export const useTemplates = () => {
     mutationFn: async ({ id, ...updateData }: Partial<TaskTemplate> & { id: string }) => {
       console.log('Updating template:', { id, updateData });
       
-      const { data, error } = await supabase
-        .from('task_templates')
-        .update({ ...updateData, updated_at: new Date().toISOString() })
-        .eq('id', id)
-        .select()
-        .single();
+      const response = await makeAuthenticatedRequest(`/templates/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(updateData),
+      });
 
-      if (error) {
-        console.error('Error updating template:', error);
-        throw error;
-      }
-
-      console.log('Template updated successfully:', data);
-      return data;
+      console.log('Template updated successfully:', response);
+      return response.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['templates'] });
@@ -114,17 +146,28 @@ export const useTemplates = () => {
     mutationFn: async (templateId: string) => {
       console.log('Deleting template:', templateId);
       
-      const { error } = await supabase
-        .from('task_templates')
-        .update({ is_deleted: true, updated_at: new Date().toISOString() })
-        .eq('id', templateId);
+      const response = await makeAuthenticatedRequest(`/templates/${templateId}`, {
+        method: 'DELETE',
+      });
 
-      if (error) {
-        console.error('Error deleting template:', error);
-        throw error;
-      }
+      console.log('Template deleted successfully:', response);
+      return response;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['templates'] });
+    },
+  });
 
-      console.log('Template deleted successfully');
+  const duplicateTemplate = useMutation({
+    mutationFn: async (templateId: string) => {
+      console.log('Duplicating template:', templateId);
+      
+      const response = await makeAuthenticatedRequest(`/templates/${templateId}/duplicate`, {
+        method: 'POST',
+      });
+
+      console.log('Template duplicated successfully:', response);
+      return response.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['templates'] });
@@ -132,14 +175,17 @@ export const useTemplates = () => {
   });
 
   return {
-    templates,
+    templates: templates || [], // Ensure templates is always an array
     isLoading,
     error,
+    useTemplate, // Export the single template hook
     createTemplate: createTemplate.mutate,
     isCreating: createTemplate.isPending,
     updateTemplate: updateTemplate.mutate,
     isUpdating: updateTemplate.isPending,
     deleteTemplate: deleteTemplate.mutate,
     isDeleting: deleteTemplate.isPending,
+    duplicateTemplate: duplicateTemplate.mutate,
+    isDuplicating: duplicateTemplate.isPending,
   };
 };

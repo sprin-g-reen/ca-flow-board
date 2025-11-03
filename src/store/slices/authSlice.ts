@@ -1,13 +1,23 @@
 
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
-export type UserRole = 'owner' | 'superadmin' | 'employee' | 'client';
+export type UserRole = 'owner' | 'superadmin' | 'admin' | 'employee' | 'client';
 
 export interface User {
   id: string;
   email: string;
-  full_name?: string;
+  fullName?: string;
   role: UserRole;
+  phone?: string;
+  avatar?: string;
+  isActive: boolean;
+  firmId?: {
+    _id: string;
+    name: string;
+    email: string;
+  };
+  createdAt: string;
+  lastLogin?: string;
 }
 
 interface AuthState {
@@ -34,7 +44,7 @@ const authSlice = createSlice({
       state.user = action.payload;
       state.isAuthenticated = !!action.payload;
       state.role = action.payload?.role || null;
-      state.name = action.payload?.full_name || action.payload?.email || undefined;
+      state.name = action.payload?.fullName || action.payload?.email || undefined;
       state.loading = false;
     },
     setCredentials: (state, action: PayloadAction<{
@@ -45,7 +55,14 @@ const authSlice = createSlice({
       token: string;
     }>) => {
       const { id, name, email, role } = action.payload;
-      state.user = { id, email, full_name: name, role };
+      state.user = { 
+        id, 
+        email, 
+        fullName: name, 
+        role,
+        isActive: true,
+        createdAt: new Date().toISOString()
+      };
       state.isAuthenticated = true;
       state.role = role;
       state.name = name;

@@ -2,6 +2,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { clientsAPI, communicationsAPI, documentsAPI, contactsAPI } from '@/services/api';
 import { toast } from 'sonner';
 
 interface Client {
@@ -15,6 +16,7 @@ interface Client {
   shipping_address?: string;
   company_registration_number?: string;
   gst_number?: string;
+  cin_number?: string;
   pan_number?: string;
   business_type?: string;
   industry?: string;
@@ -68,6 +70,35 @@ interface ClientContact {
   notes?: string;
 }
 
+// Function to map backend camelCase fields to frontend snake_case fields
+const mapClientData = (backendClient: any) => {
+  return {
+    id: backendClient._id || backendClient.id,
+    name: backendClient.name,
+    client_code: backendClient.clientCode,
+    contact_person: backendClient.contactPerson,
+    email: backendClient.email,
+    phone: backendClient.phone,
+    address: backendClient.address,
+    billing_address: backendClient.billingAddress,
+    shipping_address: backendClient.shippingAddress,
+    company_registration_number: backendClient.companyRegistrationNumber,
+    gst_number: backendClient.gstNumber,
+    cin_number: backendClient.cinNumber,
+    pan_number: backendClient.panNumber,
+    business_type: backendClient.businessType,
+    industry: backendClient.industry,
+    website: backendClient.website,
+    notes: backendClient.notes,
+    payment_terms: backendClient.paymentTerms,
+    credit_limit: backendClient.creditLimit,
+    status: backendClient.status,
+    is_deleted: backendClient.isDeleted,
+    created_at: backendClient.createdAt,
+    updated_at: backendClient.updatedAt,
+  };
+};
+
 export const useClients = () => {
   const queryClient = useQueryClient();
 
@@ -97,18 +128,20 @@ export const useClients = () => {
     queryKey: ['clients'],
     queryFn: async () => {
       try {
-        const { data, error } = await supabase
-          .from('clients')
-          .select('*')
-          .eq('is_deleted', false)
-          .order('created_at', { ascending: false });
-
-        if (error) {
-          console.error('Error fetching clients:', error);
-          throw error;
+        const response = await clientsAPI.getClients() as any;
+        if (response.success) {
+          console.log('Raw client data from API:', response.data);
+          // Map backend camelCase fields to frontend snake_case fields
+          // Filter out soft-deleted clients (they're in recycle bin)
+          const mappedClients = (response.data || [])
+            .map(mapClientData)
+            .filter(client => !client.is_deleted);
+          console.log('Mapped client data (active only):', mappedClients);
+          return mappedClients;
+        } else {
+          console.error('Error fetching clients:', response.message);
+          return [];
         }
-
-        return data || [];
       } catch (err) {
         console.error('Clients fetch error:', err);
         return [];
@@ -119,18 +152,12 @@ export const useClients = () => {
   const addClient = useMutation({
     mutationFn: async (clientData: Omit<Client, 'id' | 'created_at' | 'updated_at'>) => {
       try {
-        const { data, error } = await supabase
-          .from('clients')
-          .insert([clientData])
-          .select()
-          .single();
-
-        if (error) {
-          console.error('Error adding client:', error);
-          throw error;
+        const response = await clientsAPI.createClient(clientData) as any;
+        if (response.success) {
+          return mapClientData(response.data);
+        } else {
+          throw new Error(response.message || 'Failed to create client');
         }
-
-        return data;
       } catch (err) {
         console.error('Client add error:', err);
         throw err;
@@ -148,19 +175,12 @@ export const useClients = () => {
   const updateClient = useMutation({
     mutationFn: async ({ id, ...updates }: Partial<Client> & { id: string }) => {
       try {
-        const { data, error } = await supabase
-          .from('clients')
-          .update(updates)
-          .eq('id', id)
-          .select()
-          .single();
-
-        if (error) {
-          console.error('Error updating client:', error);
-          throw error;
+        const response = await clientsAPI.updateClient(id, updates) as any;
+        if (response.success) {
+          return mapClientData(response.data);
+        } else {
+          throw new Error(response.message || 'Failed to update client');
         }
-
-        return data;
       } catch (err) {
         console.error('Client update error:', err);
         throw err;
@@ -176,16 +196,13 @@ export const useClients = () => {
   });
 
   const deleteClient = useMutation({
-    mutationFn: async (clientId: string) => {
+    mutationFn: async (id: string) => {
       try {
-        const { error } = await supabase
-          .from('clients')
-          .update({ is_deleted: true })
-          .eq('id', clientId);
-
-        if (error) {
-          console.error('Error deleting client:', error);
-          throw error;
+        const response = await clientsAPI.deleteClient(id) as any;
+        if (response.success) {
+          return response;
+        } else {
+          throw new Error(response.message || 'Failed to delete client');
         }
       } catch (err) {
         console.error('Client delete error:', err);
@@ -201,6 +218,115 @@ export const useClients = () => {
     },
   });
 
+  const bulkImportClients = useMutation({
+    mutationFn: async (clientsData: Array<Record<string, unknown>>) => {
+      try {
+        const response = await clientsAPI.bulkImport(clientsData) as any;
+        if (response.success) {
+          return response.data;
+        } else {
+          throw new Error(response.message || 'Failed to import clients');
+        }
+      } catch (err) {
+        console.error('Bulk import error:', err);
+        throw err;
+      }
+    },
+    onSuccess: (results) => {
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
+      const { successful = [], failed = [], duplicates = [] } = results;
+      
+      if (successful.length > 0) {
+        toast.success(`Successfully imported ${successful.length} clients`);
+      }
+      
+      if (duplicates.length > 0) {
+        toast.warning(`${duplicates.length} clients were skipped (duplicates found)`);
+      }
+      
+      if (failed.length > 0) {
+        toast.error(`${failed.length} clients failed to import`);
+      }
+      
+      if (successful.length === 0 && duplicates.length === 0 && failed.length === 0) {
+        toast.info('No clients were processed');
+      }
+    },
+    onError: () => {
+      toast.error('Failed to import clients');
+    },
+  });
+
+  const bulkDeleteClients = useMutation({
+    mutationFn: async (clientIds: string[]) => {
+      try {
+        const response = await clientsAPI.bulkDelete(clientIds) as any;
+        if (response.success) {
+          return response.data;
+        } else {
+          throw new Error(response.message || 'Failed to delete clients');
+        }
+      } catch (err) {
+        console.error('Bulk delete error:', err);
+        throw err;
+      }
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
+      toast.success(`Successfully deleted ${result.deletedCount} clients`);
+    },
+    onError: () => {
+      toast.error('Failed to delete clients');
+    },
+  });
+
+  const bulkUpdateClientStatus = useMutation({
+    mutationFn: async ({ clientIds, status }: { clientIds: string[]; status: string }) => {
+      try {
+        const response = await clientsAPI.bulkUpdateStatus(clientIds, status) as any;
+        if (response.success) {
+          return response.data;
+        } else {
+          throw new Error(response.message || 'Failed to update client status');
+        }
+      } catch (err) {
+        console.error('Bulk status update error:', err);
+        throw err;
+      }
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
+      toast.success(`Successfully updated status for ${result.updatedCount} clients`);
+    },
+    onError: () => {
+      toast.error('Failed to update client status');
+    },
+  });
+
+  const bulkArchiveClients = useMutation({
+    mutationFn: async ({ clientIds, archived }: { clientIds: string[]; archived: boolean }) => {
+      try {
+        const response = await clientsAPI.bulkArchive(clientIds, archived) as any;
+        if (response.success) {
+          return response.data;
+        } else {
+          throw new Error(response.message || 'Failed to archive clients');
+        }
+      } catch (err) {
+        console.error('Bulk archive error:', err);
+        throw err;
+      }
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
+      const action = result.archived ? 'archived' : 'unarchived';
+      toast.success(`Successfully ${action} ${result.updatedCount} clients`);
+    },
+    onError: () => {
+      toast.error('Failed to archive clients');
+    },
+  });
+
   return {
     clients,
     isLoading,
@@ -208,9 +334,17 @@ export const useClients = () => {
     addClient: addClient.mutate,
     updateClient: updateClient.mutate,
     deleteClient: deleteClient.mutate,
+    bulkImportClients: bulkImportClients.mutate,
+    bulkDeleteClients: bulkDeleteClients.mutate,
+    bulkUpdateClientStatus: bulkUpdateClientStatus.mutate,
+    bulkArchiveClients: bulkArchiveClients.mutate,
     isAdding: addClient.isPending,
     isUpdating: updateClient.isPending,
     isDeleting: deleteClient.isPending,
+    isImporting: bulkImportClients.isPending,
+    isBulkDeleting: bulkDeleteClients.isPending,
+    isBulkUpdatingStatus: bulkUpdateClientStatus.isPending,
+    isBulkArchiving: bulkArchiveClients.isPending,
   };
 };
 
@@ -224,15 +358,12 @@ export const useClientCommunications = (clientId?: string) => {
       if (!clientId) return [];
       
       try {
-        const { data, error } = await supabase
-          .from('client_communications')
-          .select('*')
-          .eq('client_id', clientId)
-          .eq('is_deleted', false)
-          .order('created_at', { ascending: false });
-
-        if (error) throw error;
-        return data || [];
+        const response = await communicationsAPI.getClientCommunications(clientId) as any;
+        if (response.success) {
+          return response.data || [];
+        } else {
+          throw new Error(response.message || 'Failed to fetch communications');
+        }
       } catch (err) {
         console.error('Communications fetch error:', err);
         return [];
@@ -242,16 +373,16 @@ export const useClientCommunications = (clientId?: string) => {
   });
 
   const addCommunication = useMutation({
-    mutationFn: async (communicationData: Omit<ClientCommunication, 'id' | 'created_at'>) => {
+    mutationFn: async (communicationData: Record<string, unknown>) => {
+      if (!clientId) throw new Error('Client ID is required');
+      
       try {
-        const { data, error } = await supabase
-          .from('client_communications')
-          .insert([communicationData])
-          .select()
-          .single();
-
-        if (error) throw error;
-        return data;
+        const response = await communicationsAPI.createCommunication(clientId, communicationData) as any;
+        if (response.success) {
+          return response.data;
+        } else {
+          throw new Error(response.message || 'Failed to create communication');
+        }
       } catch (err) {
         console.error('Communication add error:', err);
         throw err;
@@ -261,13 +392,36 @@ export const useClientCommunications = (clientId?: string) => {
       queryClient.invalidateQueries({ queryKey: ['client-communications'] });
       toast.success('Communication logged successfully');
     },
+    onError: () => {
+      toast.error('Failed to log communication');
+    },
+  });
+
+  const markAsRead = useMutation({
+    mutationFn: async (communicationId: string) => {
+      try {
+        const response = await communicationsAPI.markAsRead(communicationId) as any;
+        if (!response.success) {
+          throw new Error(response.message || 'Failed to mark as read');
+        }
+        return response;
+      } catch (err) {
+        console.error('Mark as read error:', err);
+        throw err;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['client-communications'] });
+    },
   });
 
   return {
     communications,
     isLoading,
     addCommunication: addCommunication.mutate,
+    markAsRead: markAsRead.mutate,
     isAdding: addCommunication.isPending,
+    isMarkingRead: markAsRead.isPending,
   };
 };
 
@@ -281,15 +435,12 @@ export const useClientDocuments = (clientId?: string) => {
       if (!clientId) return [];
       
       try {
-        const { data, error } = await supabase
-          .from('client_documents')
-          .select('*')
-          .eq('client_id', clientId)
-          .eq('is_deleted', false)
-          .order('created_at', { ascending: false });
-
-        if (error) throw error;
-        return data || [];
+        const response = await documentsAPI.getClientDocuments(clientId) as any;
+        if (response.success) {
+          return response.data || [];
+        } else {
+          throw new Error(response.message || 'Failed to fetch documents');
+        }
       } catch (err) {
         console.error('Documents fetch error:', err);
         return [];
@@ -298,33 +449,60 @@ export const useClientDocuments = (clientId?: string) => {
     enabled: !!clientId,
   });
 
-  const addDocument = useMutation({
-    mutationFn: async (documentData: Omit<ClientDocument, 'id' | 'created_at'>) => {
+  const uploadDocument = useMutation({
+    mutationFn: async ({ formData }: { formData: FormData }) => {
+      if (!clientId) throw new Error('Client ID is required');
+      
       try {
-        const { data, error } = await supabase
-          .from('client_documents')
-          .insert([documentData])
-          .select()
-          .single();
-
-        if (error) throw error;
-        return data;
+        const response = await documentsAPI.uploadDocument(clientId, formData) as any;
+        if (response.success) {
+          return response.data;
+        } else {
+          throw new Error(response.message || 'Failed to upload document');
+        }
       } catch (err) {
-        console.error('Document add error:', err);
+        console.error('Document upload error:', err);
         throw err;
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['client-documents'] });
-      toast.success('Document added successfully');
+      toast.success('Document uploaded successfully');
+    },
+    onError: () => {
+      toast.error('Failed to upload document');
+    },
+  });
+
+  const deleteDocument = useMutation({
+    mutationFn: async (documentId: string) => {
+      try {
+        const response = await documentsAPI.deleteDocument(documentId) as any;
+        if (!response.success) {
+          throw new Error(response.message || 'Failed to delete document');
+        }
+        return response;
+      } catch (err) {
+        console.error('Document delete error:', err);
+        throw err;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['client-documents'] });
+      toast.success('Document deleted successfully');
+    },
+    onError: () => {
+      toast.error('Failed to delete document');
     },
   });
 
   return {
     documents,
     isLoading,
-    addDocument: addDocument.mutate,
-    isAdding: addDocument.isPending,
+    uploadDocument: uploadDocument.mutate,
+    deleteDocument: deleteDocument.mutate,
+    isUploading: uploadDocument.isPending,
+    isDeleting: deleteDocument.isPending,
   };
 };
 
@@ -338,15 +516,12 @@ export const useClientContacts = (clientId?: string) => {
       if (!clientId) return [];
       
       try {
-        const { data, error } = await supabase
-          .from('client_contacts')
-          .select('*')
-          .eq('client_id', clientId)
-          .eq('is_deleted', false)
-          .order('is_primary', { ascending: false });
-
-        if (error) throw error;
-        return data || [];
+        const response = await contactsAPI.getClientContacts(clientId) as any;
+        if (response.success) {
+          return response.data || [];
+        } else {
+          throw new Error(response.message || 'Failed to fetch contacts');
+        }
       } catch (err) {
         console.error('Contacts fetch error:', err);
         return [];
@@ -356,16 +531,16 @@ export const useClientContacts = (clientId?: string) => {
   });
 
   const addContact = useMutation({
-    mutationFn: async (contactData: Omit<ClientContact, 'id'>) => {
+    mutationFn: async (contactData: Record<string, unknown>) => {
+      if (!clientId) throw new Error('Client ID is required');
+      
       try {
-        const { data, error } = await supabase
-          .from('client_contacts')
-          .insert([contactData])
-          .select()
-          .single();
-
-        if (error) throw error;
-        return data;
+        const response = await contactsAPI.createContact(clientId, contactData) as any;
+        if (response.success) {
+          return response.data;
+        } else {
+          throw new Error(response.message || 'Failed to create contact');
+        }
       } catch (err) {
         console.error('Contact add error:', err);
         throw err;
@@ -375,12 +550,88 @@ export const useClientContacts = (clientId?: string) => {
       queryClient.invalidateQueries({ queryKey: ['client-contacts'] });
       toast.success('Contact added successfully');
     },
+    onError: () => {
+      toast.error('Failed to add contact');
+    },
+  });
+
+  const updateContact = useMutation({
+    mutationFn: async ({ id, ...contactData }: Record<string, unknown> & { id: string }) => {
+      try {
+        const response = await contactsAPI.updateContact(id, contactData) as any;
+        if (response.success) {
+          return response.data;
+        } else {
+          throw new Error(response.message || 'Failed to update contact');
+        }
+      } catch (err) {
+        console.error('Contact update error:', err);
+        throw err;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['client-contacts'] });
+      toast.success('Contact updated successfully');
+    },
+    onError: () => {
+      toast.error('Failed to update contact');
+    },
+  });
+
+  const deleteContact = useMutation({
+    mutationFn: async (contactId: string) => {
+      try {
+        const response = await contactsAPI.deleteContact(contactId) as any;
+        if (!response.success) {
+          throw new Error(response.message || 'Failed to delete contact');
+        }
+        return response;
+      } catch (err) {
+        console.error('Contact delete error:', err);
+        throw err;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['client-contacts'] });
+      toast.success('Contact deleted successfully');
+    },
+    onError: () => {
+      toast.error('Failed to delete contact');
+    },
+  });
+
+  const setPrimary = useMutation({
+    mutationFn: async (contactId: string) => {
+      try {
+        const response = await contactsAPI.setPrimaryContact(contactId) as any;
+        if (!response.success) {
+          throw new Error(response.message || 'Failed to set primary contact');
+        }
+        return response;
+      } catch (err) {
+        console.error('Set primary contact error:', err);
+        throw err;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['client-contacts'] });
+      toast.success('Primary contact updated successfully');
+    },
+    onError: () => {
+      toast.error('Failed to set primary contact');
+    },
   });
 
   return {
     contacts,
     isLoading,
     addContact: addContact.mutate,
+    updateContact: updateContact.mutate,
+    deleteContact: deleteContact.mutate,
+    setPrimary: setPrimary.mutate,
     isAdding: addContact.isPending,
+    isUpdating: updateContact.isPending,
+    isDeleting: deleteContact.isPending,
+    isSettingPrimary: setPrimary.isPending,
   };
 };

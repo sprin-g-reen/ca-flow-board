@@ -120,16 +120,32 @@ export const RealTimeTaskMonitor = () => {
       {/* Recent Tasks Activity */}
       <Card>
         <CardHeader>
-          <CardTitle>Recent Task Activity</CardTitle>
-          <p className="text-sm text-gray-600">Live updates every 30 seconds</p>
+          <CardTitle className="flex items-center justify-between">
+            <span>Recent Task Activity</span>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 text-sm text-green-600">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                Live
+              </div>
+              <span className="text-xs text-gray-500">
+                Updates every 30s
+              </span>
+            </div>
+          </CardTitle>
+          <p className="text-sm text-gray-600">
+            Last updated: {realTimeData?.lastUpdated ? new Date(realTimeData.lastUpdated).toLocaleTimeString() : 'Just now'}
+          </p>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
             {realTimeData?.recentTasks?.slice(0, 8).map((task: any) => (
-              <div key={task.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <div key={task.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg transition-all hover:bg-gray-100">
                 <div className="flex-1">
                   <h4 className="font-medium text-sm">{task.title}</h4>
-                  <p className="text-xs text-gray-600">{task.client_name}</p>
+                  <p className="text-xs text-gray-600">{task.client_name || 'No client assigned'}</p>
+                  <p className="text-xs text-gray-500">
+                    Updated: {new Date(task.updatedAt || task.createdAt || task.updated_at || task.created_at).toLocaleDateString()}
+                  </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge className={`text-xs ${getStatusColor(task.status)}`}>
@@ -141,6 +157,12 @@ export const RealTimeTaskMonitor = () => {
                 </div>
               </div>
             ))}
+            {(!realTimeData?.recentTasks || realTimeData.recentTasks.length === 0) && (
+              <div className="text-center py-8 text-gray-500">
+                <Clock className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p>No recent task activity</p>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

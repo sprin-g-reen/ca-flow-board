@@ -10,22 +10,31 @@ interface AuthProviderProps {
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const dispatch = useDispatch();
-  const { user, profile, loading } = useAuth();
+  const { user, loading } = useAuth();
 
   useEffect(() => {
+    console.log('🔄 AuthProvider syncing:', { hasUser: !!user, loading });
+    
     dispatch(setLoading(loading));
     
-    if (profile && user) {
+    if (user) {
       dispatch(setUser({
         id: user.id,
-        email: user.email!,
-        full_name: profile.full_name || undefined,
-        role: profile.role,
+        email: user.email,
+        fullName: user.fullName || undefined,
+        role: user.role,
+        phone: user.phone,
+        avatar: user.avatar,
+        isActive: user.isActive,
+        firmId: user.firmId,
+        createdAt: user.createdAt,
+        lastLogin: user.lastLogin
       }));
     } else if (!loading) {
+      // Only clear user data when loading is complete and no user found
       dispatch(setUser(null));
     }
-  }, [user, profile, loading, dispatch]);
+  }, [user, loading, dispatch]);
 
   return <>{children}</>;
 }

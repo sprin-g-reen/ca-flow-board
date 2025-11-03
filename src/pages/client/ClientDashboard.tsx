@@ -1,4 +1,5 @@
 
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -8,12 +9,15 @@ import { useTasks } from '@/hooks/useTasks';
 import { useClients } from '@/hooks/useClients';
 import { CheckCircle, Clock, FileText, MessageSquare, Upload, Download, Eye } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import TaskDetailModal from '@/components/tasks/TaskDetailModal';
 
 const ClientDashboard = () => {
   const { profile } = useAuth();
   const { tasks, isLoading } = useTasks();
   const { clients } = useClients();
   const navigate = useNavigate();
+  const [selectedTask, setSelectedTask] = useState(null);
+  const [showTaskDetail, setShowTaskDetail] = useState(false);
   
   // Find the client record for the current user
   const currentClient = clients.find(client => client.email === profile?.email);
@@ -23,6 +27,10 @@ const ClientDashboard = () => {
   const activeTasks = clientTasks.filter(task => task.status !== 'completed');
   const completedTasks = clientTasks.filter(task => task.status === 'completed');
   const recentTasks = clientTasks.slice(0, 5);
+  
+  // Calculate real document and message counts (mock for now - will be replaced with real API)
+  const documentCount = clientTasks.reduce((count, task) => count + (task.subtasks?.length || 0), 0);
+  const messageCount = clientTasks.filter(task => task.status === 'inprogress').length; // Approximate active conversations
   
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -50,6 +58,11 @@ const ClientDashboard = () => {
     }
   };
 
+  const handleTaskClick = (task: any) => {
+    setSelectedTask(task);
+    setShowTaskDetail(true);
+  };
+
   if (isLoading) {
     return (
       <div className="p-6 flex items-center justify-center">
@@ -62,7 +75,7 @@ const ClientDashboard = () => {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-ca-green-dark">Welcome back, {currentClient?.name || profile?.full_name}!</h1>
+          <h1 className="text-2xl font-bold text-ca-green-dark">Welcome back, {currentClient?.name || profile?.fullName}!</h1>
           <p className="text-muted-foreground">Track your service requests and project progress</p>
         </div>
         <div className="flex gap-2">
@@ -115,7 +128,7 @@ const ClientDashboard = () => {
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-600">Documents</p>
-                <p className="text-2xl font-bold text-purple-600">12</p>
+                <p className="text-2xl font-bold text-purple-600">{documentCount}</p>
               </div>
             </div>
           </CardContent>
@@ -129,7 +142,7 @@ const ClientDashboard = () => {
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-600">Messages</p>
-                <p className="text-2xl font-bold text-orange-600">3</p>
+                <p className="text-2xl font-bold text-orange-600">{messageCount}</p>
               </div>
             </div>
           </CardContent>
@@ -145,7 +158,11 @@ const ClientDashboard = () => {
           <CardContent>
             <div className="space-y-4">
               {recentTasks.length > 0 ? recentTasks.map((task) => (
-                <div key={task.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors">
+                <div 
+                  key={task.id} 
+                  className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+                  onClick={() => handleTaskClick(task)}
+                >
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
                       <h4 className="font-medium">{task.title}</h4>
@@ -169,6 +186,17 @@ const ClientDashboard = () => {
                     <p className="text-xs text-gray-500 mt-1">
                       Due: {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'No deadline'}
                     </p>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="mt-2"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleTaskClick(task);
+                      }}
+                    >
+                      View Details
+                    </Button>
                   </div>
                 </div>
               )) : (
@@ -257,6 +285,12 @@ const ClientDashboard = () => {
           </div>
         </CardContent>
       </Card>
+      
+      <TaskDetailModal 
+        task={selectedTask}
+        open={showTaskDetail}
+        onOpenChange={setShowTaskDetail}
+      />
     </div>
   );
 };

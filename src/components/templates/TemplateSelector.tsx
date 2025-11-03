@@ -1,12 +1,10 @@
 
 import { useState } from 'react';
-import { useSelector } from 'react-redux';
-import { RootState } from '@/store';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { TaskTemplate } from '@/store/slices/tasksSlice';
+import { useTemplates, TaskTemplate } from '@/hooks/useTemplates';
 
 interface TemplateSelectorProps {
   onSelectTemplate: (template: TaskTemplate) => void;
@@ -15,29 +13,37 @@ interface TemplateSelectorProps {
 }
 
 export function TemplateSelector({ onSelectTemplate, selectedCategory, onCategoryChange }: TemplateSelectorProps) {
-  const { taskTemplates } = useSelector((state: RootState) => state.tasks);
+  const { templates, isLoading } = useTemplates();
 
   const filteredTemplates = selectedCategory && selectedCategory !== 'all'
-    ? taskTemplates.filter(template => template.category === selectedCategory)
-    : taskTemplates;
+    ? templates.filter(template => template.category === selectedCategory)
+    : templates;
 
   const getCategoryLabel = (category: string) => {
     switch (category) {
-      case 'gst_filing': return 'GST Filing';
-      case 'itr_filing': return 'ITR Filing';
-      case 'roc_filing': return 'ROC Filing';
+      case 'gst': return 'GST Filing';
+      case 'itr': return 'ITR Filing';
+      case 'roc': return 'ROC Filing';
       default: return 'Other';
     }
   };
 
   const getCategoryColor = (category: string) => {
     switch (category) {
-      case 'gst_filing': return 'bg-green-100 text-green-800';
-      case 'itr_filing': return 'bg-blue-100 text-blue-800';
-      case 'roc_filing': return 'bg-purple-100 text-purple-800';
+      case 'gst': return 'bg-green-100 text-green-800';
+      case 'itr': return 'bg-blue-100 text-blue-800';
+      case 'roc': return 'bg-purple-100 text-purple-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-muted-foreground">Loading templates...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -48,9 +54,9 @@ export function TemplateSelector({ onSelectTemplate, selectedCategory, onCategor
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Categories</SelectItem>
-            <SelectItem value="gst_filing">GST Filing</SelectItem>
-            <SelectItem value="itr_filing">ITR Filing</SelectItem>
-            <SelectItem value="roc_filing">ROC Filing</SelectItem>
+            <SelectItem value="gst">GST Filing</SelectItem>
+            <SelectItem value="itr">ITR Filing</SelectItem>
+            <SelectItem value="roc">ROC Filing</SelectItem>
             <SelectItem value="other">Other</SelectItem>
           </SelectContent>
         </Select>
@@ -76,18 +82,18 @@ export function TemplateSelector({ onSelectTemplate, selectedCategory, onCategor
                 {template.description}
               </p>
               <div className="flex gap-2 flex-wrap mb-3">
-                {template.isRecurring && (
+                {template.is_recurring && (
                   <Badge variant="outline" className="text-xs">
-                    {template.recurrencePattern}
+                    {template.recurrence_pattern}
                   </Badge>
                 )}
-                {template.isPayableTask && (
+                {template.is_payable_task && (
                   <Badge variant="secondary" className="text-xs">
                     ₹{template.price}
                   </Badge>
                 )}
                 <Badge variant="outline" className="text-xs">
-                  {template.subtasks.length} subtasks
+                  {template.subtasks?.length || 0} subtasks
                 </Badge>
               </div>
               <Button 
@@ -105,7 +111,7 @@ export function TemplateSelector({ onSelectTemplate, selectedCategory, onCategor
         ))}
       </div>
 
-      {filteredTemplates.length === 0 && (
+      {filteredTemplates.length === 0 && !isLoading && (
         <div className="text-center py-8">
           <p className="text-muted-foreground">
             {selectedCategory ? 'No templates found for this category' : 'No templates available'}

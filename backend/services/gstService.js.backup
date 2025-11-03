@@ -1,0 +1,711 @@
+import axios from 'axios';
+
+class GSTService {
+  constructor() {
+    this.apiConfig = {
+      baseURL: 'https://services.gst.gov.in/services/api/search',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Connection': 'keep-alive',
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'same-site',
+      }
+    };
+    
+    // Disable mock data - use real GST APIs only
+    this.useMockData = false;
+  }
+
+  // Mock GST filing data for development/testing
+  getMockGSTFilingData(gstin, fy) {
+    return {
+      success: true,
+      data: {
+        filingStatus: [
+          [
+            {
+              "fy": "2025-2026",
+              "taxp": "August",
+              "mof": "ONLINE",
+              "dof": "11/09/2025",
+              "rtntype": "GSTR1",
+              "arn": "NA",
+              "status": "Filed"
+            },
+            {
+              "fy": "2025-2026",
+              "taxp": "July",
+              "mof": "ONLINE",
+              "dof": "11/08/2025",
+              "rtntype": "GSTR1",
+              "arn": "NA",
+              "status": "Filed"
+            },
+            {
+              "fy": "2025-2026",
+              "taxp": "June",
+              "mof": "ONLINE",
+              "dof": "10/07/2025",
+              "rtntype": "GSTR1",
+              "arn": "NA",
+              "status": "Filed"
+            },
+            {
+              "fy": "2025-2026",
+              "taxp": "May",
+              "mof": "ONLINE",
+              "dof": "11/06/2025",
+              "rtntype": "GSTR1",
+              "arn": "NA",
+              "status": "Filed"
+            },
+            {
+              "fy": "2025-2026",
+              "taxp": "April",
+              "mof": "ONLINE",
+              "dof": "10/05/2025",
+              "rtntype": "GSTR1",
+              "arn": "NA",
+              "status": "Filed"
+            },
+            {
+              "fy": "2025-2026",
+              "taxp": "August",
+              "mof": "ONLINE",
+              "dof": "20/09/2025",
+              "rtntype": "GSTR3B",
+              "arn": "NA",
+              "status": "Filed"
+            },
+            {
+              "fy": "2025-2026",
+              "taxp": "July",
+              "mof": "ONLINE",
+              "dof": "21/08/2025",
+              "rtntype": "GSTR3B",
+              "arn": "NA",
+              "status": "Filed"
+            }
+          ]
+        ]
+      }
+    };
+  }
+
+  // Mock comprehensive data with actual taxpayer structure
+  getMockComprehensiveData(gstin) {
+    const mockFinancialYears = [
+      { "year": "2017-2018", "value": "2017" },
+      { "year": "2018-2019", "value": "2018" },
+      { "year": "2019-2020", "value": "2019" },
+      { "year": "2020-2021", "value": "2020" },
+      { "year": "2021-2022", "value": "2021" },
+      { "year": "2022-2023", "value": "2022" },
+      { "year": "2023-2025", "value": "2023" },
+      { "year": "2025-2025", "value": "2025" },
+      { "year": "2025-2026", "value": "2025" }
+    ];
+
+    const mockFilingStatus = mockFinancialYears.slice(-5).map(year => ({
+      year: year.year,
+      value: year.value,
+      filingData: this.getMockGSTFilingData(gstin, year.value).data.filingStatus[0]
+    }));
+
+    // Mock taxpayer details in actual GST API format
+    const mockTaxpayerData = {
+      "ntcrbs": "SPO",
+      "adhrVFlag": "No",
+      "lgnm": "TEST COMPANY PRIVATE LIMITED",
+      "stj": "State - Tamil Nadu,Division - MADURAI,Zone - Madurai East,Circle - TAMIL SANGAM SALAI (Jurisdictional Office)",
+      "dty": "Regular",
+      "cxdt": "",
+      "gstin": gstin,
+      "nba": [
+        "Computer Programming and Related Activities",
+        "Supplier of Services"
+      ],
+      "ekycVFlag": "No",
+      "cmpRt": "NA",
+      "rgdt": "01/04/2017",
+      "ctb": "Private Limited Company",
+      "pradr": {
+        "adr": "123 Test Street, Test City, Test State - 123456"
+      },
+      "sts": "Active",
+      "tradeNam": "Test Company",
+      "isFieldVisitConducted": "No",
+      "ctj": "State - CBIC,Zone - CHENNAI,Commissionerate - MADURAI,Division - MADURAI - I,Range - MADURAI CITY RANGE",
+      "einvoiceStatus": "No"
+    };
+
+    const enrichedTaxpayerDetails = this.enrichTaxpayerDetailsWithCompliance(
+      mockTaxpayerData,
+      {
+        financialYears: mockFinancialYears,
+        allFilingStatus: mockFilingStatus
+      }
+    );
+
+    return {
+      success: true,
+      data: {
+        taxpayerDetails: enrichedTaxpayerDetails,
+        financialYears: mockFinancialYears,
+        filingStatus: mockFilingStatus,
+        companyEstablished: "2017-2018",
+        totalYearsInBusiness: 9
+      }
+    };
+  }
+
+  // Get actual taxpayer details by GSTIN
+  // Get taxpayer details from Cleartax (alternative to government API)
+  async getTaxpayerDetailsFromCleartax(gstin) {
+    try {
+      const response = await axios.get(`https://cleartax.in/f/compliance-report/${gstin}`, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept': 'application/json, text/plain, */*',
+          'Accept-Language': 'en-US,en;q=0.9'
+        },
+        timeout: 30000
+      });
+
+      if (response.data && response.data.taxpayerInfo) {
+        const taxpayerInfo = response.data.taxpayerInfo;
+        
+        // Map Cleartax format to our expected format
+        const mappedData = {
+          gstin: taxpayerInfo.gstin,
+          lgnm: taxpayerInfo.lgnm,
+          tradeNam: taxpayerInfo.tradeNam,
+          ctb: taxpayerInfo.ctb,
+          rgdt: taxpayerInfo.rgdt,
+          sts: taxpayerInfo.sts,
+          nba: taxpayerInfo.nba || [],
+          pradr: {
+            adr: this.formatCleartaxAddress(taxpayerInfo.pradr?.addr)
+          },
+          dty: taxpayerInfo.dty,
+          stj: taxpayerInfo.stj,
+          ctj: taxpayerInfo.ctj,
+          lstupdt: taxpayerInfo.lstupdt
+        };
+
+        console.log('Cleartax API Response:', {
+          companyName: mappedData.lgnm,
+          businessType: mappedData.ctb,
+          status: mappedData.sts,
+          registrationDate: mappedData.rgdt
+        });
+
+        return {
+          success: true,
+          data: mappedData
+        };
+      }
+
+      return {
+        success: false,
+        error: 'No taxpayer information found'
+      };
+    } catch (error) {
+      console.error('Cleartax API Error:', error.message);
+      return {
+        success: false,
+        error: `Failed to fetch taxpayer details from Cleartax: ${error.message}`
+      };
+    }
+  }
+
+  // Format Cleartax address to single string
+  formatCleartaxAddress(addr) {
+    if (!addr) return '';
+    
+    const parts = [];
+    if (addr.bnm) parts.push(addr.bnm);
+    if (addr.bno) parts.push(addr.bno);
+    if (addr.flno) parts.push(addr.flno);
+    if (addr.st) parts.push(addr.st);
+    if (addr.loc) parts.push(addr.loc);
+    if (addr.dst) parts.push(addr.dst);
+    if (addr.stcd) parts.push(addr.stcd);
+    if (addr.pncd) parts.push(addr.pncd);
+    
+    return parts.join(', ');
+  }
+
+  async getTaxpayerDetails(gstin, captcha = '000000') {
+    // Use mock data in development if enabled
+    if (this.useMockData) {
+      console.log('Using mock taxpayer details for development');
+      return {
+        success: true,
+        data: {
+          "ntcrbs": "SPO",
+          "adhrVFlag": "No",
+          "lgnm": "TEST COMPANY PRIVATE LIMITED",
+          "stj": "State - Tamil Nadu,Division - MADURAI,Zone - Madurai East,Circle - TAMIL SANGAM SALAI (Jurisdictional Office)",
+          "dty": "Regular",
+          "cxdt": "",
+          "gstin": gstin,
+          "nba": [
+            "Computer Programming and Related Activities",
+            "Supplier of Services"
+          ],
+          "ekycVFlag": "No",
+          "cmpRt": "NA",
+          "rgdt": "01/04/2017",
+          "ctb": "Private Limited Company",
+          "pradr": {
+            "adr": "123 Test Street, Test City, Test State - 123456"
+          },
+          "sts": "Active",
+          "tradeNam": "Test Company",
+          "isFieldVisitConducted": "No",
+          "ctj": "State - CBIC,Zone - CHENNAI,Commissionerate - MADURAI,Division - MADURAI - I,Range - MADURAI CITY RANGE",
+          "einvoiceStatus": "No"
+        }
+      };
+    }
+
+    try {
+      const response = await axios.post('https://services.gst.gov.in/services/api/search/taxpayerDetails', {
+        gstin: gstin,
+        captcha: captcha
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept': 'application/json, text/plain, */*',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Connection': 'keep-alive',
+          'Referer': 'https://services.gst.gov.in/services/searchtp',
+          'Origin': 'https://services.gst.gov.in'
+        },
+        timeout: 30000
+      });
+
+      console.log('GST Taxpayer Details API Response:', {
+        status: response.status,
+        hasCompanyName: !!response.data?.lgnm,
+        companyName: response.data?.lgnm,
+        tradeName: response.data?.tradeNam,
+        registrationDate: response.data?.rgdt,
+        businessType: response.data?.ctb,
+        status: response.data?.sts
+      });
+
+      // Check for GST API error responses
+      if (response.data?.errorCode) {
+        console.error('GST Taxpayer Details API Error:', response.data);
+        return {
+          success: false,
+          error: `GST API Error: ${response.data.errorCode} - ${response.data.message || 'API service unavailable'}`,
+          statusCode: 400
+        };
+      }
+
+      // Check if we have valid taxpayer data
+      if (!response.data || !response.data.gstin) {
+        console.warn('GST API returned no taxpayer data:', response.data);
+        return {
+          success: false,
+          error: 'No taxpayer data received from GST API. The GSTIN may be invalid.',
+          statusCode: 404
+        };
+      }
+
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('GST Taxpayer Details API Error:', error.message);
+      if (error.response) {
+        console.error('Error response:', error.response.data);
+      }
+      
+      return {
+        success: false,
+        error: error.response?.data?.message || 'Failed to fetch taxpayer details. The GST service may be temporarily unavailable.',
+        statusCode: error.response?.status
+      };
+    }
+  }
+
+  // Get financial years for a GSTIN - this tells us when company was established
+  async getFinancialYears(gstin) {
+    // Use mock data in development if enabled
+    if (this.useMockData) {
+      console.log('Using mock financial years data for development');
+      return {
+        success: true,
+        data: {
+          status: 1,
+          data: [
+            { "year": "2017-2018", "value": "2017" },
+            { "year": "2018-2019", "value": "2018" },
+            { "year": "2019-2020", "value": "2019" },
+            { "year": "2020-2021", "value": "2020" },
+            { "year": "2021-2022", "value": "2021" },
+            { "year": "2022-2023", "value": "2022" },
+            { "year": "2023-2025", "value": "2023" },
+            { "year": "2025-2025", "value": "2025" },
+            { "year": "2025-2026", "value": "2025" }
+          ]
+        }
+      };
+    }
+
+    try {
+      const response = await axios.get(`${this.apiConfig.baseURL}/dropdownfinyear?gstin=${gstin}`, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept': 'application/json, text/plain, */*',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Referer': 'https://services.gst.gov.in/services/searchtp',
+          'Origin': 'https://services.gst.gov.in'
+        },
+        timeout: 30000
+      });
+
+      console.log('GST Financial Years API Response:', {
+        status: response.status,
+        dataStatus: response.data?.status,
+        yearsCount: response.data?.data ? response.data.data.length : 0,
+        firstYear: response.data?.data?.[0]?.year,
+        lastYear: response.data?.data?.[response.data.data.length - 1]?.year
+      });
+
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('GST Financial Years API Error:', error.message);
+      return {
+        success: false,
+        error: error.response?.data?.message || 'Failed to fetch financial years',
+        statusCode: error.response?.status
+      };
+    }
+  }
+
+  // Get return filing details for a specific financial year
+  async getReturnDetails(gstin, fy) {
+    try {
+      const response = await axios.post(`${this.apiConfig.baseURL}/taxpayerReturnDetails`, {
+        gstin,
+        fy
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        timeout: 30000
+      });
+
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('GST Return Details API Error:', error.message);
+      return {
+        success: false,
+        error: error.response?.data?.message || 'Failed to fetch return details',
+        statusCode: error.response?.status
+      };
+    }
+  }
+
+  // Get comprehensive GST information using multiple APIs
+  async getComprehensiveGSTInfo(gstin, captcha = '000000') {
+    // Use mock data in development if enabled
+    if (this.useMockData) {
+      console.log('Using mock comprehensive GST data for development');
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API delay
+      return this.getMockComprehensiveData(gstin);
+    }
+
+    try {
+      // Step 1: Try Cleartax API first (more reliable)
+      console.log('Step 1: Fetching taxpayer details from Cleartax for GSTIN:', gstin);
+      const cleartaxResult = await this.getTaxpayerDetailsFromCleartax(gstin);
+      
+      if (cleartaxResult.success) {
+        console.log('Successfully fetched data from Cleartax');
+        const taxpayerData = cleartaxResult.data;
+        
+        // Create mock financial years based on registration date
+        const regYear = new Date(taxpayerData.rgdt.split('/').reverse().join('-')).getFullYear();
+        const currentYear = new Date().getFullYear();
+        const financialYears = [];
+        
+        for (let year = regYear; year <= currentYear; year++) {
+          financialYears.push({
+            year: `${year}-${year + 1}`,
+            value: year.toString()
+          });
+        }
+
+        // Enrich with compliance analysis
+        const enrichedData = this.enrichTaxpayerDetailsWithCompliance(taxpayerData, {
+          financialYears: financialYears,
+          allFilingStatus: []
+        });
+
+        return {
+          success: true,
+          data: {
+            taxpayerDetails: enrichedData,
+            financialYears: financialYears,
+            filingStatus: [],
+            companyEstablished: `${regYear}-${regYear + 1}`,
+            totalYearsInBusiness: currentYear - regYear + 1
+          }
+        };
+      }
+
+      // Step 2: Fallback to government API if Cleartax fails
+      console.log('Step 2: Trying government API as fallback');
+      const response = await axios.post(`${this.apiConfig.baseURL}/taxpayerDetails`, {
+        return {
+          success: false,
+          error: 'No financial years found for this GSTIN. Company may not be registered.'
+        };
+      }
+
+      // Step 3: Get filing details for each financial year (limit to recent years for performance)
+      console.log(`Step 3: Fetching filing details for ${Math.min(financialYears.length, 5)} recent years`);
+      const allFilingStatus = [];
+      const recentYears = financialYears.slice(-5); // Get last 5 years for performance
+      
+      for (const yearInfo of recentYears) {
+        try {
+          console.log(`Fetching filing details for year: ${yearInfo.year}`);
+          const filingResult = await this.getReturnDetails(gstin, yearInfo.value);
+          
+          if (filingResult.success && filingResult.data?.filingStatus) {
+            allFilingStatus.push({
+              year: yearInfo.year,
+              value: yearInfo.value,
+              filingData: filingResult.data.filingStatus
+            });
+          } else {
+            // Even if no filing data, add the year to show it exists
+            allFilingStatus.push({
+              year: yearInfo.year,
+              value: yearInfo.value,
+              filingData: []
+            });
+          }
+          
+          // Add delay to avoid overwhelming the API
+          await new Promise(resolve => setTimeout(resolve, 200));
+        } catch (error) {
+          console.error(`Error fetching filing data for year ${yearInfo.year}:`, error.message);
+          // Continue with other years even if one fails
+          allFilingStatus.push({
+            year: yearInfo.year,
+            value: yearInfo.value,
+            filingData: [],
+            error: error.message
+          });
+        }
+      }
+
+      // Step 4: Combine actual taxpayer data with filing analysis
+      const enrichedTaxpayerDetails = this.enrichTaxpayerDetailsWithCompliance(
+        taxpayerDetailsResult.data,
+        {
+          financialYears,
+          allFilingStatus
+        }
+      );
+
+      console.log(`Step 4: Analysis complete. Company: ${taxpayerDetailsResult.data.lgnm}, Established: ${financialYears[0]?.year}, Filing years: ${financialYears.length}`);
+
+      return {
+        success: true,
+        data: {
+          taxpayerDetails: enrichedTaxpayerDetails,
+          financialYears,
+          filingStatus: allFilingStatus,
+          companyEstablished: financialYears[0]?.year,
+          totalYearsInBusiness: financialYears.length
+        }
+      };
+    } catch (error) {
+      console.error('Comprehensive GST Info Error:', error.message);
+      return {
+        success: false,
+        error: 'Failed to fetch comprehensive GST information: ' + error.message
+      };
+    }
+  }
+
+  // Enrich actual taxpayer details with filing compliance analysis
+  enrichTaxpayerDetailsWithCompliance(taxpayerData, filingData) {
+    const { financialYears, allFilingStatus } = filingData;
+    
+    // Get establishment year from financial years
+    const establishmentYear = financialYears.length > 0 ? financialYears[0].year : null;
+    
+    // Calculate compliance from filing data
+    const filingCompliance = this.analyzeComprehensiveFilingCompliance(allFilingStatus);
+    
+    // Return enriched taxpayer details with compliance info
+    return {
+      ...taxpayerData,
+      establishmentYear: establishmentYear,
+      yearsInBusiness: financialYears.length,
+      filingCompliance: filingCompliance,
+      // Add computed fields for form auto-fill compatibility
+      name: taxpayerData.lgnm, // Map to standard name field
+      tradeName: taxpayerData.tradeNam,
+      address: taxpayerData.pradr?.adr,
+      businessType: this.mapGSTBusinessTypeToStandard(taxpayerData.ctb),
+      industry: taxpayerData.nba && taxpayerData.nba.length > 0 ? taxpayerData.nba[0] : null,
+      registrationDate: taxpayerData.rgdt,
+      status: taxpayerData.sts
+    };
+  }
+
+  // Map GST business type to standard form business types
+  mapGSTBusinessTypeToStandard(gstBusinessType) {
+    const typeMap = {
+      'Partnership': 'partnership',
+      'Private Limited Company': 'private_limited',
+      'Public Limited Company': 'public_limited',
+      'Proprietorship': 'proprietorship',
+      'LLP': 'llp',
+      'Trust': 'trust',
+      'Society': 'society',
+      'HUF': 'huf',
+      'Company': 'private_limited' // Default mapping
+    };
+    
+    return typeMap[gstBusinessType] || 'private_limited';
+  }
+
+  // Analyze comprehensive filing compliance across all years
+  analyzeComprehensiveFilingCompliance(allFilingStatus) {
+    if (!allFilingStatus || allFilingStatus.length === 0) {
+      return {
+        overallStatus: "No Data",
+        totalYears: 0,
+        totalReturns: 0,
+        filedReturns: 0,
+        pendingReturns: 0,
+        compliancePercentage: 0,
+        yearWiseCompliance: []
+      };
+    }
+
+    let totalReturns = 0;
+    let filedReturns = 0;
+    const yearWiseCompliance = [];
+
+    // Analyze each year's compliance
+    for (const yearData of allFilingStatus) {
+      const yearReturns = Array.isArray(yearData.filingData) ? yearData.filingData.flat() : [];
+      const yearTotal = yearReturns.length;
+      const yearFiled = yearReturns.filter(r => r.status === "Filed").length;
+      const yearCompliance = yearTotal > 0 ? Math.round((yearFiled / yearTotal) * 100) : 0;
+
+      yearWiseCompliance.push({
+        year: yearData.year,
+        totalReturns: yearTotal,
+        filedReturns: yearFiled,
+        pendingReturns: yearTotal - yearFiled,
+        compliancePercentage: yearCompliance,
+        hasError: !!yearData.error
+      });
+
+      totalReturns += yearTotal;
+      filedReturns += yearFiled;
+    }
+
+    const pendingReturns = totalReturns - filedReturns;
+    const compliancePercentage = totalReturns > 0 ? Math.round((filedReturns / totalReturns) * 100) : 0;
+
+    let overallStatus = "Poor";
+    if (compliancePercentage >= 90) overallStatus = "Excellent";
+    else if (compliancePercentage >= 75) overallStatus = "Good";
+    else if (compliancePercentage >= 50) overallStatus = "Average";
+
+    return {
+      overallStatus,
+      totalYears: allFilingStatus.length,
+      totalReturns,
+      filedReturns,
+      pendingReturns,
+      compliancePercentage,
+      yearWiseCompliance
+    };
+  }
+
+  // Validate GSTIN format
+  validateGSTIN(gstin) {
+    const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+    return gstinRegex.test(gstin);
+  }
+
+  // Extract state code from GSTIN
+  getStateFromGSTIN(gstin) {
+    if (!this.validateGSTIN(gstin)) return null;
+    
+    const stateCode = gstin.substring(0, 2);
+    const stateCodes = {
+      '01': 'Jammu and Kashmir',
+      '02': 'Himachal Pradesh',
+      '03': 'Punjab',
+      '04': 'Chandigarh',
+      '05': 'Uttarakhand',
+      '06': 'Haryana',
+      '07': 'Delhi',
+      '08': 'Rajasthan',
+      '09': 'Uttar Pradesh',
+      '10': 'Bihar',
+      '11': 'Sikkim',
+      '12': 'Arunachal Pradesh',
+      '13': 'Nagaland',
+      '14': 'Manipur',
+      '15': 'Mizoram',
+      '16': 'Tripura',
+      '17': 'Meghalaya',
+      '18': 'Assam',
+      '19': 'West Bengal',
+      '20': 'Jharkhand',
+      '21': 'Odisha',
+      '22': 'Chhattisgarh',
+      '23': 'Madhya Pradesh',
+      '24': 'Gujarat',
+      '25': 'Daman and Diu',
+      '26': 'Dadra and Nagar Haveli',
+      '27': 'Maharashtra',
+      '28': 'Andhra Pradesh',
+      '29': 'Karnataka',
+      '30': 'Goa',
+      '31': 'Lakshadweep',
+      '32': 'Kerala',
+      '33': 'Tamil Nadu',
+      '34': 'Puducherry',
+      '35': 'Andaman and Nicobar Islands',
+      '36': 'Telangana',
+      '37': 'Andhra Pradesh',
+      '38': 'Ladakh'
+    };
+    
+    return stateCodes[stateCode] || 'Unknown State';
+  }
+}
+
+export default new GSTService();

@@ -1,5 +1,6 @@
 
-import { useState } from 'react';
+import React, { useState } from 'react';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 import {
   Card,
   CardContent,
@@ -17,33 +18,150 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useSettings } from '@/hooks/useSettings';
 import { BackendConnectivityTest } from '@/components/testing/BackendConnectivityTest';
 import { SystemConfigurationSettings } from '@/components/settings/SystemConfigurationSettings';
+import { InvoiceAccountsSettings } from '@/components/settings/InvoiceAccountsSettings';
 import { RecurringTaskAutomation } from '@/components/automation/RecurringTaskAutomation';
 import { IntegrationsTestSuite } from '@/components/testing/IntegrationsTestSuite';
 import { EmailTemplateManager } from '@/components/communication/EmailTemplateManager';
 import { ExcelManager } from '@/components/excel/ExcelManager';
+import { 
+  Building2, 
+  Bell, 
+  Shield, 
+  CreditCard, 
+  Settings2, 
+  Zap,
+  Save,
+  RotateCcw,
+  Upload,
+  Download,
+  CheckCircle,
+  AlertCircle,
+  Loader2,
+  TestTube
+} from 'lucide-react';
 
 const OwnerSettings = () => {
-  const [emailNotifications, setEmailNotifications] = useState(true);
-  const [smsNotifications, setSmsNotifications] = useState(false);
-  const [taskAssignments, setTaskAssignments] = useState(true);
-  const [invoiceEvents, setInvoiceEvents] = useState(true);
-  const [clientSignups, setClientSignups] = useState(true);
-  const [dailyReports, setDailyReports] = useState(false);
+  const [activeTab, setActiveTab] = useState('company');
+  const [importFile, setImportFile] = useState<File | null>(null);
+  
+  const {
+    settings,
+    isLoading,
+    error,
+    unsavedChanges,
+    hasUnsavedChanges,
+    updateSetting,
+    saveChanges,
+    discardChanges,
+    resetSettings,
+    exportSettings,
+    importSettings,
+    getSetting,
+    isUpdating,
+    isResetting,
+    isExporting
+  } = useSettings({ autoSave: true, saveDelay: 2000 });
+
+  const handleFileImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setImportFile(file);
+      await importSettings(file);
+      setImportFile(null);
+      event.target.value = ''; // Reset file input
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin" />
+        <span className="ml-2">Loading settings...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>
+          Failed to load settings. Please refresh the page or contact support.
+        </AlertDescription>
+      </Alert>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">System Settings</h1>
+          <p className="text-muted-foreground">
+            Configure your CA Flow Board system settings and preferences
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={exportSettings}
+            disabled={isExporting}
+          >
+            {isExporting ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4 mr-2" />
+            )}
+            Export Settings
+          </Button>
+          <div className="relative">
+            <input
+              type="file"
+              accept=".json"
+              onChange={handleFileImport}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            />
+            <Button variant="outline" size="sm">
+              <Upload className="h-4 w-4 mr-2" />
+              Import Settings
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Auto-save indicator */}
+      {hasUnsavedChanges && (
+        <Alert>
+          <CheckCircle className="h-4 w-4" />
+          <AlertDescription className="flex items-center justify-between">
+            <span>Changes will be saved automatically in a few seconds...</span>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={saveChanges} disabled={isUpdating}>
+                {isUpdating ? (
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4 mr-1" />
+                )}
+                Save Now
+              </Button>
+              <Button size="sm" variant="outline" onClick={discardChanges}>
+                <RotateCcw className="h-4 w-4 mr-1" />
+                Discard
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
       <Card>
         <CardHeader>
           <CardTitle className="text-2xl">Settings</CardTitle>
@@ -52,271 +170,509 @@ const OwnerSettings = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="general" className="w-full">
-            <TabsList className="grid w-full grid-cols-7">
-              <TabsTrigger value="general">General</TabsTrigger>
-              <TabsTrigger value="notifications">Notifications</TabsTrigger>
-              <TabsTrigger value="security">Security</TabsTrigger>
-              <TabsTrigger value="billing">Billing</TabsTrigger>
-              <TabsTrigger value="system">System</TabsTrigger>
-              <TabsTrigger value="automation">Automation</TabsTrigger>
-              <TabsTrigger value="testing">Testing</TabsTrigger>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsList className="grid w-full grid-cols-8">
+              <TabsTrigger value="company" className="flex items-center gap-1">
+                <Building2 className="h-4 w-4" />
+                Company
+              </TabsTrigger>
+              <TabsTrigger value="accounts" className="flex items-center gap-1">
+                <CreditCard className="h-4 w-4" />
+                Accounts
+              </TabsTrigger>
+              <TabsTrigger value="notifications" className="flex items-center gap-1">
+                <Bell className="h-4 w-4" />
+                Notifications
+              </TabsTrigger>
+              <TabsTrigger value="security" className="flex items-center gap-1">
+                <Shield className="h-4 w-4" />
+                Security
+              </TabsTrigger>
+              <TabsTrigger value="billing" className="flex items-center gap-1">
+                <CreditCard className="h-4 w-4" />
+                Billing
+              </TabsTrigger>
+              <TabsTrigger value="system" className="flex items-center gap-1">
+                <Settings2 className="h-4 w-4" />
+                System
+              </TabsTrigger>
+              <TabsTrigger value="automation" className="flex items-center gap-1">
+                <Zap className="h-4 w-4" />
+                Automation
+              </TabsTrigger>
+              <TabsTrigger value="testing" className="flex items-center gap-1">
+                <TestTube className="h-4 w-4" />
+                Testing
+              </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="general" className="space-y-6">
-              <div className="space-y-4 py-4">
-                <h3 className="text-lg font-medium">Company Information</h3>
-                <Separator />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="companyName">Company Name</Label>
-                    <Input id="companyName" defaultValue="CA Flow Board" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="businessType">Business Type</Label>
-                    <Input id="businessType" defaultValue="Chartered Accountancy Firm" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email Address</Label>
-                    <Input id="email" type="email" defaultValue="contact@caflowboard.com" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="phone">Phone Number</Label>
-                    <Input id="phone" defaultValue="+91 98765 43210" />
-                  </div>
-                  <div className="space-y-2 md:col-span-2">
-                    <Label htmlFor="address">Address</Label>
-                    <Input id="address" defaultValue="123 Business Park, Financial District" />
-                  </div>
+            {/* Company Settings */}
+            <TabsContent value="company" className="space-y-6 mt-6">
+              <div>
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Building2 className="h-5 w-5" />
+                  Company Information
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Configure your organization's basic information and branding
+                </p>
+              </div>
+              <Separator />
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="companyName">Company Name</Label>
+                  <Input 
+                    id="companyName"
+                    value={getSetting('company', 'name') || ''}
+                    onChange={(e) => updateSetting('company', 'name', e.target.value)}
+                    placeholder="Enter company name"
+                  />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="registrationNumber">Registration Number</Label>
+                  <Input 
+                    id="registrationNumber"
+                    value={getSetting('company', 'registrationNumber') || ''}
+                    onChange={(e) => updateSetting('company', 'registrationNumber', e.target.value)}
+                    placeholder="Enter registration number"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="gstNumber">GST Number</Label>
+                  <Input 
+                    id="gstNumber"
+                    value={getSetting('company', 'gstNumber') || ''}
+                    onChange={(e) => updateSetting('company', 'gstNumber', e.target.value)}
+                    placeholder="Enter GST number"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="panNumber">PAN Number</Label>
+                  <Input 
+                    id="panNumber"
+                    value={getSetting('company', 'panNumber') || ''}
+                    onChange={(e) => updateSetting('company', 'panNumber', e.target.value)}
+                    placeholder="Enter PAN number"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone Number</Label>
+                  <Input 
+                    id="phone"
+                    value={getSetting('company', 'phone') || ''}
+                    onChange={(e) => updateSetting('company', 'phone', e.target.value)}
+                    placeholder="Enter phone number"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email Address</Label>
+                  <Input 
+                    id="email"
+                    type="email"
+                    value={getSetting('company', 'email') || ''}
+                    onChange={(e) => updateSetting('company', 'email', e.target.value)}
+                    placeholder="Enter email address"
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="address">Address</Label>
+                  <Textarea 
+                    id="address"
+                    value={getSetting('company', 'address') || ''}
+                    onChange={(e) => updateSetting('company', 'address', e.target.value)}
+                    placeholder="Enter complete address"
+                    className="min-h-[100px]"
+                  />
+                </div>
+              </div>
 
-                <h3 className="text-lg font-medium mt-6">System Preferences</h3>
-                <Separator />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="mt-8">
+                <h4 className="text-md font-semibold mb-4">System Preferences</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="dateFormat">Date Format</Label>
-                    <select id="dateFormat" className="w-full border rounded-md p-2">
-                      <option value="dd/mm/yyyy">DD/MM/YYYY</option>
-                      <option value="mm/dd/yyyy">MM/DD/YYYY</option>
-                      <option value="yyyy-mm-dd">YYYY-MM-DD</option>
-                    </select>
+                    <Select 
+                      value={getSetting('company', 'dateFormat') || 'DD/MM/YYYY'}
+                      onValueChange={(value) => updateSetting('company', 'dateFormat', value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select date format" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="DD/MM/YYYY">DD/MM/YYYY</SelectItem>
+                        <SelectItem value="MM/DD/YYYY">MM/DD/YYYY</SelectItem>
+                        <SelectItem value="YYYY-MM-DD">YYYY-MM-DD</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="timeZone">Time Zone</Label>
-                    <select id="timeZone" className="w-full border rounded-md p-2">
-                      <option value="IST">Indian Standard Time (IST)</option>
-                      <option value="UTC">Coordinated Universal Time (UTC)</option>
-                      <option value="EST">Eastern Standard Time (EST)</option>
-                      <option value="PST">Pacific Standard Time (PST)</option>
-                    </select>
+                    <Select 
+                      value={getSetting('company', 'timeZone') || 'Asia/Kolkata'}
+                      onValueChange={(value) => updateSetting('company', 'timeZone', value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select time zone" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Asia/Kolkata">Indian Standard Time (IST)</SelectItem>
+                        <SelectItem value="UTC">Coordinated Universal Time (UTC)</SelectItem>
+                        <SelectItem value="America/New_York">Eastern Time (EST)</SelectItem>
+                        <SelectItem value="America/Los_Angeles">Pacific Time (PST)</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="currency">Currency</Label>
-                    <select id="currency" className="w-full border rounded-md p-2">
-                      <option value="INR">Indian Rupee (₹)</option>
-                      <option value="USD">US Dollar ($)</option>
-                      <option value="EUR">Euro (€)</option>
-                      <option value="GBP">British Pound (£)</option>
-                    </select>
+                    <Select 
+                      value={getSetting('company', 'currency') || 'INR'}
+                      onValueChange={(value) => updateSetting('company', 'currency', value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select currency" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="INR">Indian Rupee (₹)</SelectItem>
+                        <SelectItem value="USD">US Dollar ($)</SelectItem>
+                        <SelectItem value="EUR">Euro (€)</SelectItem>
+                        <SelectItem value="GBP">British Pound (£)</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                </div>
-
-                <Button className="mt-4 bg-ca-blue hover:bg-ca-blue-dark">Save Changes</Button>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="notifications" className="space-y-6">
-              <div className="space-y-4 py-4">
-                <h3 className="text-lg font-medium">Notification Preferences</h3>
-                <Separator />
-                
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="font-medium">Email Notifications</h4>
-                      <p className="text-sm text-muted-foreground">Receive notifications via email</p>
-                    </div>
-                    <Switch
-                      checked={emailNotifications}
-                      onCheckedChange={setEmailNotifications}
-                    />
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="font-medium">SMS Notifications</h4>
-                      <p className="text-sm text-muted-foreground">Receive notifications via SMS</p>
-                    </div>
-                    <Switch
-                      checked={smsNotifications}
-                      onCheckedChange={setSmsNotifications}
-                    />
-                  </div>
-                </div>
-                
-                <h3 className="text-lg font-medium mt-6">Notification Events</h3>
-                <Separator />
-                
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="font-medium">Task Assignments</h4>
-                      <p className="text-sm text-muted-foreground">Notifications for new task assignments</p>
-                    </div>
-                    <Switch
-                      checked={taskAssignments}
-                      onCheckedChange={setTaskAssignments}
-                    />
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="font-medium">Invoice Events</h4>
-                      <p className="text-sm text-muted-foreground">Notifications for invoice generation and payments</p>
-                    </div>
-                    <Switch
-                      checked={invoiceEvents}
-                      onCheckedChange={setInvoiceEvents}
-                    />
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="font-medium">Client Signups</h4>
-                      <p className="text-sm text-muted-foreground">Notifications when new clients join</p>
-                    </div>
-                    <Switch
-                      checked={clientSignups}
-                      onCheckedChange={setClientSignups}
-                    />
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="font-medium">Daily Reports</h4>
-                      <p className="text-sm text-muted-foreground">Receive daily activity summary reports</p>
-                    </div>
-                    <Switch
-                      checked={dailyReports}
-                      onCheckedChange={setDailyReports}
-                    />
-                  </div>
-                </div>
-                
-                <Button className="mt-4 bg-ca-blue hover:bg-ca-blue-dark">Save Preferences</Button>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="security" className="space-y-6">
-              <div className="space-y-4 py-4">
-                <h3 className="text-lg font-medium">Change Password</h3>
-                <Separator />
-                
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="currentPassword">Current Password</Label>
-                    <Input id="currentPassword" type="password" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="newPassword">New Password</Label>
-                    <Input id="newPassword" type="password" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="confirmPassword">Confirm Password</Label>
-                    <Input id="confirmPassword" type="password" />
-                  </div>
-                </div>
-                
-                <Button className="mt-4 bg-ca-blue hover:bg-ca-blue-dark">Update Password</Button>
-                
-                <h3 className="text-lg font-medium mt-6">Two-Factor Authentication</h3>
-                <Separator />
-                
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="font-medium">Enable Two-Factor Authentication</h4>
-                    <p className="text-sm text-muted-foreground">Secure your account with 2FA</p>
-                  </div>
-                  <Button variant="outline">Setup</Button>
                 </div>
               </div>
             </TabsContent>
 
-            <TabsContent value="billing" className="space-y-6">
-              <div className="space-y-4 py-4">
-                <h3 className="text-lg font-medium">Subscription Plan</h3>
-                <Separator />
-                
-                <div className="p-4 border rounded-lg bg-muted/50">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <h3 className="font-medium">Premium Plan</h3>
-                      <p className="text-sm text-muted-foreground">₹4,999/month</p>
+            {/* Invoice Accounts Settings */}
+            <TabsContent value="accounts">
+              <InvoiceAccountsSettings 
+                getSetting={getSetting} 
+                updateSetting={updateSetting} 
+              />
+            </TabsContent>
+
+            <TabsContent value="notifications" className="space-y-6 mt-6">
+              <div>
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Bell className="h-5 w-5" />
+                  Notification Preferences
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Configure how and when you want to receive notifications
+                </p>
+              </div>
+              <Separator />
+              
+              <div className="space-y-6">
+                <div>
+                  <h4 className="text-md font-semibold mb-4">Delivery Methods</h4>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label>Email Notifications</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Receive notifications via email
+                        </p>
+                      </div>
+                      <Switch
+                        checked={getSetting('notifications', 'email')}
+                        onCheckedChange={(checked) => updateSetting('notifications', 'email', checked)}
+                      />
                     </div>
-                    <span className="bg-green-100 text-green-800 px-2 py-1 rounded text-xs font-medium">Active</span>
-                  </div>
-                  <div className="mt-4">
-                    <p className="text-sm">Your next billing date is May 15, 2025</p>
-                  </div>
-                  <div className="mt-4 flex space-x-2">
-                    <Button variant="outline" size="sm">Change Plan</Button>
-                    <Button variant="destructive" size="sm">Cancel Subscription</Button>
-                  </div>
-                </div>
-                
-                <h3 className="text-lg font-medium mt-6">Payment Method</h3>
-                <Separator />
-                
-                <div className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="flex items-center space-x-4">
-                    <div className="h-10 w-10 bg-gray-100 rounded-md flex items-center justify-center">
-                      <span className="font-bold">V</span>
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label>SMS Notifications</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Receive notifications via SMS
+                        </p>
+                      </div>
+                      <Switch
+                        checked={getSetting('notifications', 'sms')}
+                        onCheckedChange={(checked) => updateSetting('notifications', 'sms', checked)}
+                      />
                     </div>
-                    <div>
-                      <p className="font-medium">Visa ending in 4242</p>
-                      <p className="text-sm text-muted-foreground">Expires 12/25</p>
-                    </div>
-                  </div>
-                  <Button variant="ghost" size="sm">Change</Button>
-                </div>
-                
-                <h3 className="text-lg font-medium mt-6">Billing History</h3>
-                <Separator />
-                
-                <div className="space-y-2">
-                  <div className="flex justify-between p-3 border-b">
-                    <div>
-                      <p className="font-medium">Apr 15, 2025</p>
-                      <p className="text-sm text-muted-foreground">Premium Plan - Monthly</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-medium">₹4,999</p>
-                      <p className="text-sm text-green-600">Paid</p>
-                    </div>
-                  </div>
-                  <div className="flex justify-between p-3 border-b">
-                    <div>
-                      <p className="font-medium">Mar 15, 2025</p>
-                      <p className="text-sm text-muted-foreground">Premium Plan - Monthly</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-medium">₹4,999</p>
-                      <p className="text-sm text-green-600">Paid</p>
-                    </div>
-                  </div>
-                  <div className="flex justify-between p-3 border-b">
-                    <div>
-                      <p className="font-medium">Feb 15, 2025</p>
-                      <p className="text-sm text-muted-foreground">Premium Plan - Monthly</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-medium">₹4,999</p>
-                      <p className="text-sm text-green-600">Paid</p>
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label>Push Notifications</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Receive browser push notifications
+                        </p>
+                      </div>
+                      <Switch
+                        checked={getSetting('notifications', 'push')}
+                        onCheckedChange={(checked) => updateSetting('notifications', 'push', checked)}
+                      />
                     </div>
                   </div>
                 </div>
-                
-                <Button variant="outline" className="mt-2">View All Invoices</Button>
+
+                <div>
+                  <h4 className="text-md font-semibold mb-4">Event Types</h4>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label>Task Assignments</Label>
+                        <p className="text-sm text-muted-foreground">
+                          When tasks are assigned to team members
+                        </p>
+                      </div>
+                      <Switch
+                        checked={getSetting('notifications', 'taskAssignments')}
+                        onCheckedChange={(checked) => updateSetting('notifications', 'taskAssignments', checked)}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label>Task Completions</Label>
+                        <p className="text-sm text-muted-foreground">
+                          When tasks are marked as completed
+                        </p>
+                      </div>
+                      <Switch
+                        checked={getSetting('notifications', 'taskCompletions')}
+                        onCheckedChange={(checked) => updateSetting('notifications', 'taskCompletions', checked)}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label>Due Date Reminders</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Reminders for approaching due dates
+                        </p>
+                      </div>
+                      <Switch
+                        checked={getSetting('notifications', 'dueDateReminders')}
+                        onCheckedChange={(checked) => updateSetting('notifications', 'dueDateReminders', checked)}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label>Client Activities</Label>
+                        <p className="text-sm text-muted-foreground">
+                          New client registrations and updates
+                        </p>
+                      </div>
+                      <Switch
+                        checked={getSetting('notifications', 'clientActivities')}
+                        onCheckedChange={(checked) => updateSetting('notifications', 'clientActivities', checked)}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label>Payment Updates</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Invoice payments and payment failures
+                        </p>
+                      </div>
+                      <Switch
+                        checked={getSetting('notifications', 'paymentUpdates')}
+                        onCheckedChange={(checked) => updateSetting('notifications', 'paymentUpdates', checked)}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label>System Alerts</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Critical system notifications and maintenance
+                        </p>
+                      </div>
+                      <Switch
+                        checked={getSetting('notifications', 'systemAlerts')}
+                        onCheckedChange={(checked) => updateSetting('notifications', 'systemAlerts', checked)}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="security" className="space-y-6 mt-6">
+              <div>
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Shield className="h-5 w-5" />
+                  Security & Privacy
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Manage your account security and privacy settings
+                </p>
+              </div>
+              <Separator />
+              
+              <div className="space-y-6">
+                <div>
+                  <h4 className="text-md font-semibold mb-4">Authentication</h4>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label>Two-Factor Authentication</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Add an extra layer of security to your account
+                        </p>
+                      </div>
+                      <Switch
+                        checked={getSetting('security', 'twoFactorAuth')}
+                        onCheckedChange={(checked) => updateSetting('security', 'twoFactorAuth', checked)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="sessionTimeout">Session Timeout (minutes)</Label>
+                      <Input 
+                        id="sessionTimeout"
+                        type="number"
+                        value={getSetting('security', 'sessionTimeout') || ''}
+                        onChange={(e) => updateSetting('security', 'sessionTimeout', parseInt(e.target.value))}
+                        placeholder="Enter session timeout in minutes"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-md font-semibold mb-4">Access Control</h4>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label>IP Restrictions</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Restrict access to specific IP addresses
+                        </p>
+                      </div>
+                      <Switch
+                        checked={getSetting('security', 'ipRestrictions')}
+                        onCheckedChange={(checked) => updateSetting('security', 'ipRestrictions', checked)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="allowedIPs">Allowed IP Addresses</Label>
+                      <Textarea 
+                        id="allowedIPs"
+                        value={getSetting('security', 'allowedIPs') || ''}
+                        onChange={(e) => updateSetting('security', 'allowedIPs', e.target.value)}
+                        placeholder="Enter IP addresses (one per line)"
+                        className="min-h-[100px]"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-md font-semibold mb-4">Data Retention</h4>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="dataRetentionPeriod">Data Retention Period (days)</Label>
+                      <Input 
+                        id="dataRetentionPeriod"
+                        type="number"
+                        value={getSetting('security', 'dataRetentionPeriod') || ''}
+                        onChange={(e) => updateSetting('security', 'dataRetentionPeriod', parseInt(e.target.value))}
+                        placeholder="Enter retention period in days"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label>Auto-delete Old Data</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Automatically delete data after retention period
+                        </p>
+                      </div>
+                      <Switch
+                        checked={getSetting('security', 'autoDeleteOldData')}
+                        onCheckedChange={(checked) => updateSetting('security', 'autoDeleteOldData', checked)}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="billing" className="space-y-6 mt-6">
+              <div>
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <CreditCard className="h-5 w-5" />
+                  Billing & Subscription
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Manage your subscription and billing preferences
+                </p>
+              </div>
+              <Separator />
+              
+              <div className="space-y-6">
+                <div>
+                  <h4 className="text-md font-semibold mb-4">Current Plan</h4>
+                  <div className="p-4 border rounded-lg bg-muted/50">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <h3 className="font-medium">{getSetting('billing', 'currentPlan') || 'Premium'} Plan</h3>
+                        <p className="text-sm text-muted-foreground">
+                          ₹{getSetting('billing', 'monthlyRate') || '4,999'}/month
+                        </p>
+                      </div>
+                      <Badge variant="secondary">Active</Badge>
+                    </div>
+                    <div className="mt-4">
+                      <p className="text-sm">
+                        Your next billing date is {getSetting('billing', 'nextBillingDate') || 'May 15, 2025'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-md font-semibold mb-4">Billing Preferences</h4>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label>Auto-renewal</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Automatically renew subscription
+                        </p>
+                      </div>
+                      <Switch
+                        checked={getSetting('billing', 'autoRenewal')}
+                        onCheckedChange={(checked) => updateSetting('billing', 'autoRenewal', checked)}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label>Email Invoices</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Send invoices via email
+                        </p>
+                      </div>
+                      <Switch
+                        checked={getSetting('billing', 'emailInvoices')}
+                        onCheckedChange={(checked) => updateSetting('billing', 'emailInvoices', checked)}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-md font-semibold mb-4">Tax Information</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="taxId">Tax ID</Label>
+                      <Input 
+                        id="taxId"
+                        value={getSetting('billing', 'taxId') || ''}
+                        onChange={(e) => updateSetting('billing', 'taxId', e.target.value)}
+                        placeholder="Enter tax ID"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="billingAddress">Billing Address</Label>
+                      <Textarea 
+                        id="billingAddress"
+                        value={getSetting('billing', 'billingAddress') || ''}
+                        onChange={(e) => updateSetting('billing', 'billingAddress', e.target.value)}
+                        placeholder="Enter billing address"
+                        className="min-h-[100px]"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
             </TabsContent>
 
@@ -363,6 +719,38 @@ const OwnerSettings = () => {
               </div>
             </TabsContent>
           </Tabs>
+        </CardContent>
+      </Card>
+
+      {/* Reset Settings Danger Zone */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-destructive">Danger Zone</CardTitle>
+          <CardDescription>
+            Irreversible actions that will affect your system configuration
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="font-medium">Reset All Settings</h4>
+              <p className="text-sm text-muted-foreground">
+                Reset all settings to their default values. This action cannot be undone.
+              </p>
+            </div>
+            <Button 
+              variant="destructive" 
+              onClick={() => resetSettings()}
+              disabled={isResetting}
+            >
+              {isResetting ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <RotateCcw className="h-4 w-4 mr-2" />
+              )}
+              Reset Settings
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

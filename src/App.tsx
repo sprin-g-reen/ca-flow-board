@@ -19,9 +19,11 @@ import OwnerClients from './pages/owner/OwnerClients';
 import OwnerEmployees from './pages/owner/OwnerEmployees';
 import OwnerInvoices from './pages/owner/OwnerInvoices';
 import OwnerCalendar from './pages/owner/OwnerCalendar';
+import OwnerViews from './pages/owner/OwnerViews';
 import OwnerAnalytics from './pages/owner/OwnerAnalytics';
 import OwnerSettings from './pages/owner/OwnerSettings';
 import OwnerTemplates from './pages/owner/OwnerTemplates';
+import RecycleBin from './pages/owner/RecycleBin';
 
 // Admin routes
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -34,6 +36,8 @@ import AdminAnalytics from './pages/admin/AdminAnalytics';
 // Employee routes
 import EmployeeDashboard from './pages/employee/EmployeeDashboard';
 import EmployeeTasks from './pages/employee/EmployeeTasks';
+import EmployeeClients from './pages/employee/EmployeeClients';
+import EmployeeChat from './pages/employee/EmployeeChat';
 
 // Client routes
 import ClientDashboard from './pages/client/ClientDashboard';
@@ -67,8 +71,9 @@ const App = () => (
                 <Route path="clients" element={<OwnerClients />} />
                 <Route path="employees" element={<OwnerEmployees />} />
                 <Route path="invoices" element={<OwnerInvoices />} />
-                <Route path="calendar" element={<OwnerCalendar />} />
+                <Route path="views" element={<OwnerViews />} />
                 <Route path="analytics" element={<OwnerAnalytics />} />
+                <Route path="recycle-bin" element={<RecycleBin />} />
                 <Route path="settings" element={<OwnerSettings />} />
               </Route>
               
@@ -94,9 +99,8 @@ const App = () => (
               }>
                 <Route path="dashboard" element={<EmployeeDashboard />} />
                 <Route path="tasks" element={<EmployeeTasks />} />
-                <Route path="calendar" element={<div>Calendar</div>} />
-                <Route path="clients" element={<div>Client List</div>} />
-                <Route path="chat" element={<div>Messages</div>} />
+                <Route path="clients" element={<EmployeeClients />} />
+                <Route path="chat" element={<EmployeeChat />} />
               </Route>
               
               {/* Client routes */}

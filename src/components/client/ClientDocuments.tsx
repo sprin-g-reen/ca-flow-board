@@ -1,177 +1,120 @@
-
 import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useParams } from 'react-router-dom';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { DocumentUpload } from './DocumentUpload';
-import { FileText, Download, Upload, Search, Calendar, Eye, Share } from 'lucide-react';
-import { useAuth } from '@/hooks/useAuth';
+import { useDocuments } from '@/hooks/useDocuments';
 import { useToast } from '@/hooks/use-toast';
+import { FileText, Upload, Download, Search, Trash2, Archive, MoreVertical, X } from 'lucide-react';
+import { DocumentUpload } from './DocumentUpload';
 
-interface Document {
-  id: string;
-  name: string;
-  type: string;
-  size: string;
-  uploadDate: string;
-  category: 'financial' | 'legal' | 'tax' | 'identity' | 'bank' | 'invoice' | 'receipt' | 'other';
-  status: 'pending' | 'approved' | 'rejected' | 'processing';
-  downloadUrl?: string;
-  uploadedBy?: string;
-  notes?: string;
-  sharedWith?: string[];
+interface ClientDocumentsProps {
+  clientId?: string;
 }
 
-// Mock data - in a real app, this would come from the database
-const mockDocuments: Document[] = [
-  {
-    id: '1',
-    name: 'GST Return March 2024.pdf',
-    type: 'PDF',
-    size: '2.3 MB',
-    uploadDate: '2024-04-15',
-    category: 'tax',
-    status: 'approved',
-    downloadUrl: '#',
-    uploadedBy: 'Client',
-    notes: 'Monthly GST return for March 2024',
-    sharedWith: ['employee@ca.com'],
-  },
-  {
-    id: '2',
-    name: 'Bank Statement Q1 2024.pdf',
-    type: 'PDF',
-    size: '1.8 MB',
-    uploadDate: '2024-04-10',
-    category: 'bank',
-    status: 'processing',
-    uploadedBy: 'Client',
-    notes: 'Q1 2024 bank statements for reconciliation',
-  },
-  {
-    id: '3',
-    name: 'Income Tax Computation.xlsx',
-    type: 'Excel',
-    size: '456 KB',
-    uploadDate: '2024-04-08',
-    category: 'tax',
-    status: 'approved',
-    downloadUrl: '#',
-    uploadedBy: 'CA Assistant',
-    notes: 'Prepared income tax computation for FY 2023-24',
-    sharedWith: ['client@example.com'],
-  },
-  {
-    id: '4',
-    name: 'Incorporation Certificate.pdf',
-    type: 'PDF',
-    size: '856 KB',
-    uploadDate: '2024-03-28',
-    category: 'legal',
-    status: 'approved',
-    downloadUrl: '#',
-    uploadedBy: 'Client',
-  },
-];
-
-export const ClientDocuments = () => {
+export const ClientDocuments = ({ clientId: propClientId }: ClientDocumentsProps) => {
+  const { id: routeClientId } = useParams();
+  const clientId = propClientId || routeClientId;
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [showUpload, setShowUpload] = useState(false);
-  const { profile } = useAuth();
   const { toast } = useToast();
 
-  const filteredDocuments = mockDocuments.filter(doc => {
-    const matchesSearch = doc.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         doc.notes?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === 'all' || doc.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
+  const {
+    documents,
+    total,
+    isLoading,
+    uploadDocument,
+    deleteDocument,
+    downloadDocument
+  } = useDocuments(clientId);
 
-  const getCategoryColor = (category: string) => {
-    switch (category) {
-      case 'tax': return 'bg-blue-100 text-blue-800';
-      case 'financial': return 'bg-green-100 text-green-800';
-      case 'legal': return 'bg-purple-100 text-purple-800';
-      case 'bank': return 'bg-orange-100 text-orange-800';
-      case 'invoice': return 'bg-yellow-100 text-yellow-800';
-      case 'receipt': return 'bg-pink-100 text-pink-800';
-      case 'identity': return 'bg-indigo-100 text-indigo-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'approved': return 'bg-green-100 text-green-800';
-      case 'pending': return 'bg-yellow-100 text-yellow-800';
-      case 'processing': return 'bg-blue-100 text-blue-800';
-      case 'rejected': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
+  const filteredDocuments = documents.filter(doc =>
+    doc.documentName.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   const handleUpload = async (file: File, metadata: any) => {
-    // Mock upload functionality
-    console.log('Uploading file:', file.name, 'with metadata:', metadata);
-    
-    // Simulate upload delay
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    toast({
-      title: "Document uploaded",
-      description: `${file.name} has been uploaded successfully and is pending review.`,
-    });
-  };
+    if (!clientId) {
+      toast({ title: "Error", description: "Client ID is required", variant: "destructive" });
+      return;
+    }
 
-  const handleShare = (docId: string) => {
-    toast({
-      title: "Share document",
-      description: "Document sharing link has been copied to clipboard.",
-    });
-  };
+    try {
+      // Map frontend categories to backend enum values
+      const categoryMap: Record<string, string> = {
+        'financial': 'financial_statement',
+        'tax': 'tax_document',
+        'legal': 'contract',
+        'identity': 'identity_proof',
+        'bank': 'financial_statement',
+        'invoice': 'invoice',
+        'receipt': 'receipt',
+        'other': 'other'
+      };
 
-  const handleDownload = (doc: Document) => {
-    if (doc.downloadUrl) {
-      window.open(doc.downloadUrl, '_blank');
-    } else {
-      toast({
-        title: "Download not available",
-        description: "This document is still being processed.",
-        variant: "destructive",
+      await uploadDocument({
+        file,
+        documentData: {
+          clientId,
+          documentName: metadata.name || file.name,
+          documentType: (categoryMap[metadata.category] || 'other') as any,
+          description: metadata.notes || '',
+          isConfidential: metadata.isConfidential || false
+        }
       });
+      setShowUpload(false);
+      toast({ title: "Success", description: "Document uploaded successfully" });
+    } catch (error) {
+      console.error('Upload failed:', error);
+      toast({ title: "Error", description: "Failed to upload document", variant: "destructive" });
     }
   };
+
+  const handleDownload = async (document: any) => {
+    try {
+      // Use the API download endpoint to track downloads
+      await downloadDocument(document._id);
+      
+      // Create download link using the API endpoint
+      const link = window.document.createElement('a');
+      link.href = `/api/documents/${document._id}/download`;
+      link.download = document.originalFileName;
+      link.target = '_blank';
+      window.document.body.appendChild(link);
+      link.click();
+      window.document.body.removeChild(link);
+    } catch (error) {
+      console.error('Download failed:', error);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold text-ca-green-dark">My Documents</h2>
-          <p className="text-muted-foreground">Upload, manage and share documents with your CA team</p>
+          <h2 className="text-2xl font-bold text-gray-900">Documents</h2>
+          <p className="text-gray-600">Manage client documents and files</p>
         </div>
-        <Button 
-          onClick={() => setShowUpload(!showUpload)} 
-          className="bg-ca-blue hover:bg-ca-blue-dark"
-        >
-          <Upload className="h-4 w-4 mr-2" />
-          {showUpload ? 'Hide Upload' : 'Upload Documents'}
+        <Button onClick={() => setShowUpload(true)} className="flex items-center gap-2">
+          <Upload className="h-4 w-4" />
+          Upload Document
         </Button>
       </div>
 
-      {/* Upload Section */}
-      {showUpload && (
-        <DocumentUpload onUpload={handleUpload} clientId={profile?.id} />
-      )}
-
-      {/* Filters */}
       <Card>
         <CardContent className="p-4">
-          <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex items-center gap-4">
             <div className="flex-1">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                 <Input
                   placeholder="Search documents..."
                   value={searchTerm}
@@ -180,153 +123,95 @@ export const ClientDocuments = () => {
                 />
               </div>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {['all', 'tax', 'financial', 'legal', 'bank', 'invoice', 'receipt', 'identity', 'other'].map((category) => (
-                <Button
-                  key={category}
-                  variant={selectedCategory === category ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setSelectedCategory(category)}
-                  className={selectedCategory === category ? "bg-ca-blue hover:bg-ca-blue-dark" : ""}
-                >
-                  {category.charAt(0).toUpperCase() + category.slice(1)}
-                </Button>
-              ))}
-            </div>
+            <Badge variant="outline" className="bg-blue-100 text-blue-800">
+              {total} Documents
+            </Badge>
           </div>
         </CardContent>
       </Card>
 
-      {/* Document Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-blue-600">{mockDocuments.length}</p>
-              <p className="text-sm text-gray-600">Total Documents</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-green-600">
-                {mockDocuments.filter(d => d.status === 'approved').length}
-              </p>
-              <p className="text-sm text-gray-600">Approved</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-yellow-600">
-                {mockDocuments.filter(d => d.status === 'pending').length}
-              </p>
-              <p className="text-sm text-gray-600">Pending Review</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-blue-600">
-                {mockDocuments.filter(d => d.status === 'processing').length}
-              </p>
-              <p className="text-sm text-gray-600">Processing</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Documents Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredDocuments.map((document) => (
-          <Card key={document.id} className="hover:shadow-md transition-shadow">
-            <CardHeader className="pb-3">
-              <div className="flex items-start gap-3">
-                <FileText className="h-8 w-8 text-blue-600 mt-1 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-medium text-sm truncate">{document.name}</h3>
-                  <p className="text-xs text-gray-500">{document.type} • {document.size}</p>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <div className="space-y-3">
-                <div className="flex gap-2 flex-wrap">
-                  <Badge className={getCategoryColor(document.category)}>
-                    {document.category}
-                  </Badge>
-                  <Badge className={getStatusColor(document.status)}>
-                    {document.status}
-                  </Badge>
+        {filteredDocuments.length === 0 ? (
+          <div className="col-span-full text-center py-12">
+            <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No documents found</h3>
+            <p className="text-gray-600 mb-4">
+              {searchTerm ? 'Try adjusting your search' : 'Upload your first document to get started'}
+            </p>
+            <Button onClick={() => setShowUpload(true)}>Upload Document</Button>
+          </div>
+        ) : (
+          filteredDocuments.map((document) => (
+            <Card key={document._id} className="hover:shadow-md transition-shadow">
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-medium text-sm truncate" title={document.documentName}>
+                      {document.documentName}
+                    </h3>
+                    <p className="text-xs text-gray-500">
+                      {document.fileExtension?.toUpperCase()} • {Math.round(document.fileSize / 1024)} KB
+                    </p>
+                  </div>
+                  <div className="flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDownload(document)}
+                      className="h-8 w-8 p-0"
+                    >
+                      <Download className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => deleteDocument(document._id)}
+                      className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
                 
-                <div className="flex items-center gap-2 text-xs text-gray-500">
-                  <Calendar className="h-3 w-3" />
-                  <span>Uploaded: {new Date(document.uploadDate).toLocaleDateString()}</span>
-                </div>
-
-                {document.uploadedBy && (
-                  <div className="text-xs text-gray-500">
-                    <span>By: {document.uploadedBy}</span>
-                  </div>
-                )}
-
-                {document.notes && (
-                  <p className="text-xs text-gray-600 line-clamp-2">{document.notes}</p>
-                )}
-
-                {document.sharedWith && document.sharedWith.length > 0 && (
-                  <div className="text-xs text-gray-500">
-                    <span>Shared with {document.sharedWith.length} user(s)</span>
-                  </div>
-                )}
-
-                <div className="flex gap-2">
-                  {document.downloadUrl && document.status === 'approved' && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => handleDownload(document)}
-                    >
-                      <Download className="h-3 w-3 mr-1" />
-                      Download
-                    </Button>
+                <div className="space-y-2">
+                  <Badge variant="outline" className="text-xs">
+                    {document.documentType?.replace('_', ' ') || 'Document'}
+                  </Badge>
+                  
+                  {document.description && (
+                    <p className="text-xs text-gray-600 line-clamp-2" title={document.description}>
+                      {document.description}
+                    </p>
                   )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleShare(document.id)}
-                  >
-                    <Share className="h-3 w-3" />
-                  </Button>
+                  
+                  <div className="text-xs text-gray-500">
+                    Uploaded by {document.uploadedBy?.fullName || 'Unknown'}
+                  </div>
+                  
+                  {document.isConfidential && (
+                    <Badge variant="destructive" className="text-xs">
+                      Confidential
+                    </Badge>
+                  )}
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          ))
+        )}
       </div>
 
-      {filteredDocuments.length === 0 && (
-        <Card>
-          <CardContent className="text-center py-12">
-            <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium mb-2">No documents found</h3>
-            <p className="text-gray-500 mb-4">
-              {searchTerm ? 'Try adjusting your search criteria' : 'Start by uploading your first document'}
-            </p>
-            <Button 
-              onClick={() => setShowUpload(true)} 
-              className="bg-ca-blue hover:bg-ca-blue-dark"
-            >
-              <Upload className="h-4 w-4 mr-2" />
-              Upload Document
-            </Button>
-          </CardContent>
-        </Card>
+      {showUpload && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Upload Document</h3>
+              <Button variant="ghost" size="sm" onClick={() => setShowUpload(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <DocumentUpload onUpload={handleUpload} clientId={clientId} />
+          </div>
+        </div>
       )}
     </div>
   );

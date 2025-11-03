@@ -1,6 +1,5 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 
 export interface RecurringTaskSchedule {
   id: string;
@@ -21,48 +20,65 @@ export interface CreateRecurringScheduleData {
   next_generation_date: string;
 }
 
+const API_BASE_URL = 'http://localhost:3001/api';
+
+import { getValidatedToken } from '@/lib/auth';
+
+// Helper function to make authenticated API calls
+const makeAuthenticatedRequest = async (url: string, options: RequestInit = {}) => {
+  const token = getValidatedToken();
+  if (!token) {
+    throw new Error('Authentication token not found');
+  }
+
+  const response = await fetch(`${API_BASE_URL}${url}`, {
+    ...options,
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+  }
+
+  return response.json();
+};
+
 export const useRecurringTasks = () => {
   const queryClient = useQueryClient();
 
   const { data: schedules = [], isLoading } = useQuery({
     queryKey: ['recurring-schedules'],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
-        .from('recurring_schedules')
-        .select(`
-          *,
-          tasks!template_id (
-            title,
-            category,
-            recurrence_pattern
-          )
-        `)
-        .eq('is_active', true)
-        .order('next_generation_date', { ascending: true });
-
-      if (error) {
+      try {
+        console.log('Fetching recurring schedules...');
+        const response = await makeAuthenticatedRequest('/tasks/recurring-schedules');
+        console.log('Recurring schedules response:', response);
+        return response.data || [];
+      } catch (error) {
         console.error('Error fetching recurring schedules:', error);
-        throw error;
+        // Don't throw error for this optional feature
+        console.log('Recurring schedules feature not fully implemented yet, returning empty array');
+        return [];
       }
-
-      return data;
     },
+    retry: false, // Don't retry on failure
+    refetchOnWindowFocus: false, // Don't refetch on window focus
+    enabled: false, // Disable automatic fetching for now
   });
 
   const createRecurringSchedule = useMutation({
     mutationFn: async (scheduleData: CreateRecurringScheduleData) => {
-      const { data, error } = await (supabase as any)
-        .from('recurring_schedules')
-        .insert(scheduleData)
-        .select()
-        .single();
+      const response = await makeAuthenticatedRequest('/tasks/recurring-schedules', {
+        method: 'POST',
+        body: JSON.stringify(scheduleData),
+      });
 
-      if (error) {
-        console.error('Error creating recurring schedule:', error);
-        throw error;
-      }
-
-      return data;
+      return response.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['recurring-schedules'] });
@@ -73,34 +89,30 @@ export const useRecurringTasks = () => {
     mutationFn: async () => {
       console.log('Generating recurring tasks...');
       
-      try {
-        const { data, error } = await supabase.functions.invoke('generate-recurring-tasks');
+      const response = await makeAuthenticatedRequest('/tasks/generate-recurring', {
+        method: 'POST',
+      });
 
-        if (error) {
-          console.error('Error generating recurring tasks:', error);
-          throw error;
-        }
-
-        console.log('Generated tasks:', data);
-        return data || [];
-      } catch (err) {
-        console.error('Failed to generate recurring tasks:', err);
-        throw err;
-      }
+      console.log('Generated tasks:', response.data);
+      return response;
     },
-    onSuccess: (data) => {
+    onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['recurring-schedules'] });
-      console.log(`Generated ${data?.length || 0} recurring tasks`);
+      const generatedCount = response.data?.length || 0;
+      console.log(`Recurring task generation completed. Generated ${generatedCount} tasks`);
+      
+      // Return the response for the component to use
+      return response;
     },
-  });
-
-  return {
+    onError: (error) => {
+      console.error('Recurring task generation failed:', error);
+    },
+  });  return {
     schedules,
     isLoading,
     createRecurringSchedule: createRecurringSchedule.mutate,
     isCreating: createRecurringSchedule.isPending,
-    generateRecurringTasks: generateRecurringTasks.mutate,
+    generateRecurringTasks: generateRecurringTasks.mutateAsync,
     isGenerating: generateRecurringTasks.isPending,
   };
 };

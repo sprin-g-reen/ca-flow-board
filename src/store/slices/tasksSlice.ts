@@ -40,6 +40,7 @@ export interface Task {
   clientId: string;
   clientName: string;
   assignedTo: string[];
+  collaborators?: string[]; // Additional team members who can work on this task
   createdBy: string;
   createdAt: string;
   dueDate: string;
@@ -119,7 +120,7 @@ const mockTemplates: TaskTemplate[] = [
     isPayableTask: true,
     payableTaskType: 'payable_task_1',
     createdBy: '201',
-    createdAt: '2024-01-01T10:00:00Z',
+    createdAt: '2025-01-01T10:00:00Z',
   },
   {
     id: 'template_itr_annual',
@@ -162,7 +163,7 @@ const mockTemplates: TaskTemplate[] = [
     isPayableTask: true,
     payableTaskType: 'payable_task_1',
     createdBy: '201',
-    createdAt: '2024-01-01T11:00:00Z',
+    createdAt: '2025-01-01T11:00:00Z',
   },
   {
     id: 'template_roc_annual',
@@ -198,7 +199,7 @@ const mockTemplates: TaskTemplate[] = [
     isPayableTask: true,
     payableTaskType: 'payable_task_2',
     createdBy: '201',
-    createdAt: '2024-01-01T12:00:00Z',
+    createdAt: '2025-01-01T12:00:00Z',
   },
 ];
 
@@ -207,7 +208,7 @@ const mockTasks: Task[] = [
   {
     id: '1',
     title: 'Monthly GST Filing - ABC Corp',
-    description: 'Complete GST filing process for ABC Corp - March 2024',
+    description: 'Complete GST filing process for ABC Corp - March 2025',
     status: 'todo',
     priority: 'high',
     category: 'gst_filing',
@@ -215,8 +216,8 @@ const mockTasks: Task[] = [
     clientName: 'ABC Corp',
     assignedTo: ['301'],
     createdBy: '201',
-    createdAt: '2024-04-15T12:00:00Z',
-    dueDate: '2024-04-25T12:00:00Z',
+    createdAt: '2025-04-15T12:00:00Z',
+    dueDate: '2025-04-25T12:00:00Z',
     isTemplate: false,
     templateId: 'template_gst_monthly',
     isRecurring: true,
@@ -226,13 +227,13 @@ const mockTasks: Task[] = [
     payableTaskType: 'payable_task_1',
     quotationSent: false,
     paymentStatus: 'pending',
-    quotationNumber: 'QUO-2024-001',
+    quotationNumber: 'QUO-2025-001',
     subtasks: [
       {
         id: 'gst_1_abc',
         title: 'Collection of data from ABC Corp',
         description: 'Gather all necessary documents and data from ABC Corp',
-        dueDate: '2024-04-05T12:00:00Z',
+        dueDate: '2025-04-05T12:00:00Z',
         isCompleted: true,
         order: 1,
       },
@@ -240,7 +241,7 @@ const mockTasks: Task[] = [
         id: 'gst_2_abc',
         title: 'GSTR1 Filing for ABC Corp',
         description: 'File GSTR1 return for ABC Corp',
-        dueDate: '2024-04-10T12:00:00Z',
+        dueDate: '2025-04-10T12:00:00Z',
         isCompleted: false,
         order: 2,
       },
@@ -248,7 +249,7 @@ const mockTasks: Task[] = [
         id: 'gst_3_abc',
         title: 'GST 3B Filing & Tax Payment for ABC Corp',
         description: 'File GST 3B and make tax payment for ABC Corp',
-        dueDate: '2024-04-20T12:00:00Z',
+        dueDate: '2025-04-20T12:00:00Z',
         isCompleted: false,
         order: 3,
       },
@@ -265,8 +266,8 @@ const mockTasks: Task[] = [
     clientName: 'XYZ Industries',
     assignedTo: ['302', '303'],
     createdBy: '201',
-    createdAt: '2024-04-10T10:30:00Z',
-    dueDate: '2024-07-31T17:00:00Z',
+    createdAt: '2025-04-10T10:30:00Z',
+    dueDate: '2025-07-31T17:00:00Z',
     isTemplate: false,
     templateId: 'template_itr_annual',
     isRecurring: false,
@@ -275,7 +276,7 @@ const mockTasks: Task[] = [
     payableTaskType: 'payable_task_1',
     quotationSent: true,
     paymentStatus: 'pending',
-    quotationNumber: 'QUO-2024-002',
+    quotationNumber: 'QUO-2025-002',
   },
 ];
 

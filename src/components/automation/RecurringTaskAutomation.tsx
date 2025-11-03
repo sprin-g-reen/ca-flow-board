@@ -44,8 +44,8 @@ export const RecurringTaskAutomation = () => {
       clientName: 'ABC Corporation',
       category: 'GST',
       pattern: 'Monthly (10th)',
-      nextRun: '2024-02-10T09:00:00Z',
-      lastRun: '2024-01-10T09:00:00Z',
+      nextRun: '2025-02-10T09:00:00Z',
+      lastRun: '2025-01-10T09:00:00Z',
       isActive: true,
       assignedEmployees: ['John Doe', 'Jane Smith']
     },
@@ -55,8 +55,8 @@ export const RecurringTaskAutomation = () => {
       clientName: 'XYZ Ltd',
       category: 'GST',
       pattern: 'Monthly (20th)',
-      nextRun: '2024-02-20T09:00:00Z',
-      lastRun: '2024-01-20T09:00:00Z',
+      nextRun: '2025-02-20T09:00:00Z',
+      lastRun: '2025-01-20T09:00:00Z',
       isActive: true,
       assignedEmployees: ['Jane Smith']
     },
@@ -66,7 +66,7 @@ export const RecurringTaskAutomation = () => {
       clientName: 'Tech Solutions',
       category: 'ITR',
       pattern: 'Yearly (July 31st)',
-      nextRun: '2024-07-31T09:00:00Z',
+      nextRun: '2025-07-31T09:00:00Z',
       lastRun: '2023-07-31T09:00:00Z',
       isActive: true,
       assignedEmployees: ['John Doe']
@@ -77,7 +77,7 @@ export const RecurringTaskAutomation = () => {
       clientName: 'Startup Inc',
       category: 'ROC',
       pattern: 'Yearly (November 30th)',
-      nextRun: '2024-11-30T09:00:00Z',
+      nextRun: '2025-11-30T09:00:00Z',
       isActive: false,
       assignedEmployees: ['Jane Smith']
     }

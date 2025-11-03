@@ -53,12 +53,12 @@ const initialState: InvoiceState = {
 const mockInvoices: Invoice[] = [
   {
     id: '1001',
-    invoiceNumber: 'INV-2024-001',
+    invoiceNumber: 'INV-2025-001',
     clientId: '101',
     clientName: 'ABC Corp',
     status: 'sent',
-    issueDate: '2024-04-01T10:00:00Z',
-    dueDate: '2024-04-15T10:00:00Z',
+    issueDate: '2025-04-01T10:00:00Z',
+    dueDate: '2025-04-15T10:00:00Z',
     items: [
       {
         id: '1001-1',
@@ -87,16 +87,16 @@ const mockInvoices: Invoice[] = [
     termsAndConditions: 'Standard terms apply',
     paymentDetails: 'Bank transfer to Account #12345678',
     createdBy: '201',
-    createdAt: '2024-04-01T09:30:00Z',
+    createdAt: '2025-04-01T09:30:00Z',
   },
   {
     id: '1002',
-    invoiceNumber: 'INV-2024-002',
+    invoiceNumber: 'INV-2025-002',
     clientId: '102',
     clientName: 'XYZ Industries',
     status: 'paid',
-    issueDate: '2024-03-15T11:30:00Z',
-    dueDate: '2024-03-30T11:30:00Z',
+    issueDate: '2025-03-15T11:30:00Z',
+    dueDate: '2025-03-30T11:30:00Z',
     items: [
       {
         id: '1002-1',
@@ -113,10 +113,10 @@ const mockInvoices: Invoice[] = [
     taxTotal: 1350,
     total: 8850,
     paidAmount: 8850,
-    paidDate: '2024-03-29T14:20:00Z',
+    paidDate: '2025-03-29T14:20:00Z',
     paymentMethod: 'Online Transfer',
     createdBy: '202',
-    createdAt: '2024-03-15T10:45:00Z',
+    createdAt: '2025-03-15T10:45:00Z',
   },
 ];
 

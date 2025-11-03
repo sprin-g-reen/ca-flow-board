@@ -1,8 +1,7 @@
 
-
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { useEffect, useState } from 'react';
+import { getValidatedToken } from '@/lib/auth';
 import { Task, TaskStatus, TaskPriority, TaskCategory, SubTask } from '@/store/slices/tasksSlice';
 
 interface CreateTaskData {
@@ -23,39 +22,40 @@ interface CreateTaskData {
   is_recurring?: boolean;
   recurrence_pattern?: string;
   subtasks?: any[];
+  [key: string]: unknown;
 }
+
+const API_BASE = 'http://localhost:3001/api';
 
 export const useTasks = () => {
   const queryClient = useQueryClient();
+  const [isRealTime, setIsRealTime] = useState(true);
 
-  // Real-time subscription for tasks
-  useEffect(() => {
-    const channel = supabase
-      .channel('tasks_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'tasks'
-        },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ['tasks'] });
-        }
-      )
-      .subscribe();
+  // Manual refresh function
+  const refreshTasks = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    return queryClient.refetchQueries({ queryKey: ['tasks'] });
+  };
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [queryClient]);
+  // Status mapping function
+  const mapDatabaseStatusToType = (dbStatus: string): TaskStatus => {
+    switch (dbStatus) {
+      case 'pending': return 'todo';
+      case 'in_progress': return 'inprogress';
+      case 'todo': return 'todo';
+      case 'inprogress': return 'inprogress';
+      case 'review': return 'review';
+      case 'completed': return 'completed';
+      default: return 'todo';
+    }
+  };
 
   // Category mapping functions
   const mapDatabaseCategoryToType = (dbCategory: string): TaskCategory => {
     switch (dbCategory) {
-      case 'gst': return 'gst_filing';
-      case 'itr': return 'itr_filing';
-      case 'roc': return 'roc_filing';
+      case 'gst_filing': return 'gst_filing';
+      case 'income_tax_return': return 'itr_filing';
+      case 'compliance': return 'roc_filing';
       default: return 'other';
     }
   };
@@ -64,89 +64,177 @@ export const useTasks = () => {
     queryKey: ['tasks'],
     queryFn: async () => {
       try {
-        console.log('Fetching tasks from database...');
+        console.log('Fetching tasks from backend...');
         
-        const { data, error } = await supabase
-          .from('tasks')
-          .select(`
-            *,
-            clients (
-              name
-            )
-          `)
-          .eq('is_deleted', false)
-          .order('created_at', { ascending: false });
-
-        if (error) {
-          console.error('Error fetching tasks:', error);
-          throw error;
+        const token = getValidatedToken();
+        if (!token) {
+          throw new Error('Authentication token not found');
         }
 
-        console.log('Fetched tasks:', data);
+        const response = await fetch(`${API_BASE}/tasks`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            throw new Error('Authentication failed. Please log in again.');
+          }
+          const errorText = await response.text();
+          throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+        }
+
+        const result = await response.json();
+        console.log('Raw API response:', result);
+        
+        const tasksData = result.data?.tasks || [];
+        console.log('Tasks from API:', tasksData);
+        
+        // Ensure data is an array before mapping
+        if (!Array.isArray(tasksData)) {
+          console.warn('Tasks data is not an array, returning empty array');
+          return [];
+        }
         
         // Transform the data to match the Task interface
-        const transformedTasks: Task[] = data.map(task => ({
-          id: task.id,
+        const transformedTasks: Task[] = tasksData.map((task: any) => ({
+          id: task._id || task.id,
           title: task.title,
           description: task.description || '',
-          status: task.status as TaskStatus,
+          status: mapDatabaseStatusToType(task.status),
           priority: task.priority as TaskPriority,
-          category: mapDatabaseCategoryToType(task.category),
-          clientId: task.client_id || '',
-          clientName: task.clients?.name || task.client_name || '',
-          assignedTo: Array.isArray(task.assigned_to) ? task.assigned_to : [],
-          createdBy: task.created_by || '',
-          createdAt: task.created_at || '',
-          dueDate: task.due_date || '',
-          completedAt: task.completed_at,
-          isTemplate: task.is_template || false,
-          templateId: task.template_id,
-          parentTaskId: undefined, // This field doesn't exist in DB yet
-          isRecurring: task.is_recurring || false,
-          recurrencePattern: task.recurrence_pattern,
-          attachments: Array.isArray(task.attachments) ? task.attachments : [],
-          subtasks: Array.isArray(task.subtasks) ? (task.subtasks as unknown as SubTask[]) : [],
-          comments: Array.isArray(task.comments) ? (task.comments as unknown as {
-            id: string;
-            userId: string;
-            userName: string;
-            message: string;
-            timestamp: string;
-          }[]) : [],
-          price: task.price,
-          isPayableTask: task.is_payable_task || false,
-          payableTaskType: task.payable_task_type as 'payable_task_1' | 'payable_task_2' | undefined,
-          quotationSent: task.quotation_sent,
-          paymentStatus: task.payment_status as 'pending' | 'paid' | 'failed' | undefined,
-          quotationNumber: task.quotation_number,
+          category: mapDatabaseCategoryToType(task.type),
+          clientId: task.client?._id || task.client || '',
+          clientName: task.client?.fullName || task.client?.companyName || '',
+          assignedTo: (() => {
+            if (!task.assignedTo) return [];
+            if (Array.isArray(task.assignedTo)) {
+              return task.assignedTo.map((user: any) => {
+                if (typeof user === 'string') return user; // ID only
+                // Return full user object for populated data
+                return {
+                  _id: user._id || user.id,
+                  fullName: user.fullName,
+                  email: user.email
+                };
+              });
+            }
+            if (typeof task.assignedTo === 'object') {
+              return [{
+                _id: task.assignedTo._id || task.assignedTo.id,
+                fullName: task.assignedTo.fullName,
+                email: task.assignedTo.email
+              }];
+            }
+            return typeof task.assignedTo === 'string' ? [task.assignedTo] : [];
+          })(),
+          collaborators: (() => {
+            if (!task.collaborators) return [];
+            if (Array.isArray(task.collaborators)) {
+              return task.collaborators.map((user: any) => {
+                if (typeof user === 'string') return user; // ID only
+                // Return full user object for populated data
+                return {
+                  _id: user._id || user.id,
+                  fullName: user.fullName,
+                  email: user.email
+                };
+              });
+            }
+            return [];
+          })(),
+          createdBy: task.assignedBy?._id || task.assignedBy || '',
+          createdAt: task.createdAt || '',
+          dueDate: task.dueDate || '',
+          completedAt: task.completedDate,
+          isTemplate: false,
+          templateId: task.template?._id || task.template,
+          parentTaskId: task.parentTask?._id || task.parentTask,
+          isRecurring: task.isRecurring || false,
+          recurrencePattern: task.recurringPattern?.frequency,
+          attachments: Array.isArray(task.documents) ? task.documents : [],
+          subtasks: task.customFields?.get?.('subtasks') || [],
+          comments: Array.isArray(task.comments) ? task.comments.map((comment: any) => ({
+            id: comment._id || comment.id,
+            userId: comment.author?._id || comment.author,
+            userName: comment.author?.fullName || 'Unknown User',
+            message: comment.text,
+            timestamp: comment.createdAt,
+          })) : [],
+          price: task.fixedPrice || task.price,
+          isPayableTask: task.billable || false,
+          payableTaskType: undefined,
+          quotationSent: false,
+          paymentStatus: task.invoiced ? 'paid' : 'pending',
+          quotationNumber: undefined,
         }));
 
+        console.log('Transformed tasks:', transformedTasks);
         return transformedTasks;
       } catch (err) {
         console.error('Tasks fetch error:', err);
         throw err;
       }
     },
+    refetchInterval: isRealTime ? 30000 : false, // Refetch every 30 seconds when real-time is enabled
+    refetchIntervalInBackground: true, // Continue refetching when window is not focused
+    refetchOnWindowFocus: true, // Refetch when window gains focus
+    staleTime: 25000, // Consider data stale after 25 seconds
+    retry: (failureCount, error) => {
+      // Don't retry on authentication errors
+      if (error.message.includes('Authentication failed')) {
+        return false;
+      }
+      return failureCount < 3;
+    },
   });
+
+  // Real-time effect for automatic data refresh
+  useEffect(() => {
+    if (!isRealTime) return;
+
+    const interval = setInterval(() => {
+      // Only refetch if there are no pending mutations to avoid conflicts
+      const mutations = queryClient.getMutationCache().getAll();
+      const hasPendingMutations = mutations.some(mutation => mutation.state.status === 'pending');
+      
+      if (!hasPendingMutations) {
+        queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      }
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [isRealTime, queryClient]);
 
   const addTask = useMutation({
     mutationFn: async (taskData: CreateTaskData) => {
       try {
-        console.log('Adding task to database:', taskData);
+        console.log('Adding task via backend API:', taskData);
         
-        const { data, error } = await supabase
-          .from('tasks')
-          .insert(taskData)
-          .select()
-          .single();
-
-        if (error) {
-          console.error('Error adding task:', error);
-          throw error;
+        const token = getValidatedToken();
+        if (!token) {
+          throw new Error('Authentication token not found');
         }
 
-        console.log('Task added successfully:', data);
-        return data;
+        const response = await fetch(`${API_BASE}/tasks`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(taskData),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'Failed to create task');
+        }
+
+        const result = await response.json();
+        console.log('Task added successfully:', result.data);
+        return result.data;
       } catch (err) {
         console.error('Task add error:', err);
         throw err;
@@ -155,36 +243,273 @@ export const useTasks = () => {
     onSuccess: () => {
       console.log('Invalidating tasks query...');
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      // Also refetch to ensure immediate update
+      queryClient.refetchQueries({ queryKey: ['tasks'] });
     },
   });
 
   const updateTaskStatus = useMutation({
     mutationFn: async ({ taskId, status }: { taskId: string; status: string }) => {
       try {
-        console.log('Updating task status:', { taskId, status });
+        console.log('Updating task status via backend:', { taskId, status });
         
-        const { data, error } = await supabase
-          .from('tasks')
-          .update({ 
-            status,
-            updated_at: new Date().toISOString(),
-            completed_at: status === 'completed' ? new Date().toISOString() : null
-          })
-          .eq('id', taskId)
-          .select()
-          .single();
-
-        if (error) {
-          console.error('Error updating task:', error);
-          throw error;
+        const token = getValidatedToken();
+        if (!token) {
+          throw new Error('Authentication token not found');
         }
 
-        console.log('Task updated successfully:', data);
-        return data;
+        const response = await fetch(`${API_BASE}/tasks/${taskId}`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ 
+            status,
+            completedDate: status === 'completed' ? new Date().toISOString() : undefined
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'Failed to update task');
+        }
+
+        const result = await response.json();
+        console.log('Task updated successfully:', result.data);
+        return result.data;
       } catch (err) {
         console.error('Task update error:', err);
         throw err;
       }
+    },
+    onSuccess: (data) => {
+      // Immediately invalidate and refetch tasks for instant UI update
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.refetchQueries({ queryKey: ['tasks'] });
+      console.log('Task status updated, refreshing task list');
+    },
+  });
+
+  const updateTask = useMutation({
+    mutationFn: async ({ taskId, updates }: { taskId: string; updates: Partial<CreateTaskData> }) => {
+      try {
+        console.log('Updating task via backend:', { taskId, updates });
+        
+        const token = getValidatedToken();
+        if (!token) {
+          throw new Error('Authentication token not found');
+        }
+
+        const response = await fetch(`${API_BASE}/tasks/${taskId}`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(updates),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'Failed to update task');
+        }
+
+        const result = await response.json();
+        console.log('Task updated successfully:', result.data);
+        return result.data;
+      } catch (err) {
+        console.error('Task update error:', err);
+        throw err;
+      }
+    },
+    onSuccess: async (data) => {
+      // Immediately invalidate and refetch tasks for instant UI update
+      await queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      await queryClient.refetchQueries({ queryKey: ['tasks'] });
+      console.log('Task updated, task list refreshed');
+    },
+  });
+
+  const deleteTask = useMutation({
+    mutationFn: async (taskId: string) => {
+      try {
+        console.log('Deleting task via backend:', taskId);
+        
+        const token = getValidatedToken();
+        if (!token) {
+          throw new Error('Authentication token not found');
+        }
+
+        const response = await fetch(`${API_BASE}/tasks/${taskId}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'Failed to delete task');
+        }
+
+        const result = await response.json();
+        console.log('Task deleted successfully:', result);
+        return result;
+      } catch (err) {
+        console.error('Task delete error:', err);
+        throw err;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    },
+  });
+
+  const archiveTask = useMutation({
+    mutationFn: async (taskId: string) => {
+      try {
+        console.log('Archiving task via backend:', taskId);
+        
+        const token = getValidatedToken();
+        if (!token) {
+          throw new Error('Authentication token not found');
+        }
+
+        const response = await fetch(`${API_BASE}/tasks/${taskId}/archive`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ 
+            isArchived: true
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'Failed to archive task');
+        }
+
+        const result = await response.json();
+        console.log('Task archived successfully:', result.data);
+        return result.data;
+      } catch (err) {
+        console.error('Task archive error:', err);
+        throw err;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    },
+  });
+
+  const bulkDeleteTasks = useMutation({
+    mutationFn: async (taskIds: string[]): Promise<{ success: boolean; message: string; deletedCount: number }> => {
+      const token = getValidatedToken();
+      const response = await fetch(`${API_BASE}/tasks/bulk-delete`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ taskIds }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete tasks');
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    },
+  });
+
+  const bulkUpdateTaskStatus = useMutation({
+    mutationFn: async ({ 
+      taskIds, 
+      status 
+    }: { 
+      taskIds: string[]; 
+      status: string 
+    }): Promise<{ success: boolean; message: string; modifiedCount: number }> => {
+      const token = getValidatedToken();
+      const response = await fetch(`${API_BASE}/tasks/bulk-status`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ taskIds, status }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update task statuses');
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    },
+  });
+
+  const bulkAssignTasks = useMutation({
+    mutationFn: async ({ 
+      taskIds, 
+      assignedTo 
+    }: { 
+      taskIds: string[]; 
+      assignedTo: string 
+    }): Promise<{ success: boolean; message: string; modifiedCount: number }> => {
+      const token = getValidatedToken();
+      const response = await fetch(`${API_BASE}/tasks/bulk-assign`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ taskIds, assignedTo }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to assign tasks');
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    },
+  });
+
+  const bulkArchiveTasks = useMutation({
+    mutationFn: async ({ 
+      taskIds, 
+      isArchived = true 
+    }: { 
+      taskIds: string[]; 
+      isArchived?: boolean 
+    }): Promise<{ success: boolean; message: string; modifiedCount: number }> => {
+      const token = getValidatedToken();
+      const response = await fetch(`${API_BASE}/tasks/bulk-archive`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ taskIds, isArchived }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to archive tasks');
+      }
+
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
@@ -195,10 +520,29 @@ export const useTasks = () => {
     tasks,
     isLoading,
     error,
+    isRealTime,
+    setIsRealTime,
+    refreshTasks, // Manual refresh function
     addTask: addTask.mutate,
     isAdding: addTask.isPending,
     updateTaskStatus: updateTaskStatus.mutate,
     isUpdating: updateTaskStatus.isPending,
+    updateTask: updateTask.mutate,
+    updateTaskAsync: updateTask.mutateAsync,
+    isUpdatingTask: updateTask.isPending,
+    deleteTask: deleteTask.mutate,
+    isDeleting: deleteTask.isPending,
+    archiveTask: archiveTask.mutate,
+    isArchiving: archiveTask.isPending,
+    // Bulk operations
+    bulkDeleteTasks: bulkDeleteTasks.mutateAsync,
+    isBulkDeleting: bulkDeleteTasks.isPending,
+    bulkUpdateTaskStatus: bulkUpdateTaskStatus.mutateAsync,
+    isBulkUpdatingStatus: bulkUpdateTaskStatus.isPending,
+    bulkAssignTasks: bulkAssignTasks.mutateAsync,
+    isBulkAssigning: bulkAssignTasks.isPending,
+    bulkArchiveTasks: bulkArchiveTasks.mutateAsync,
+    isBulkArchiving: bulkArchiveTasks.isPending,
   };
 };
 

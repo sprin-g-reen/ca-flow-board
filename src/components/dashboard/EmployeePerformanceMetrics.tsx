@@ -11,6 +11,7 @@ export const EmployeePerformanceMetrics = () => {
   const { employeePerformance } = useAnalytics();
 
   const getEmployeeInitials = (name: string) => {
+    if (!name) return '??';
     return name.split(' ').map(n => n[0]).join('').toUpperCase();
   };
 
@@ -28,7 +29,7 @@ export const EmployeePerformanceMetrics = () => {
 
   // Data for charts
   const chartData = employeePerformance.map(emp => ({
-    name: emp.employeeName.split(' ')[0],
+    name: emp.employeeName ? emp.employeeName.split(' ')[0] : 'Unknown',
     tasks: emp.totalTasks,
     completed: emp.completedTasks,
     efficiency: emp.efficiency,

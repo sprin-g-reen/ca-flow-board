@@ -2,6 +2,45 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+  .line-clamp-2 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+  }
+  
+  /* Custom scrollbar utilities */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: rgba(156, 163, 175, 0.5);
+    border-radius: 3px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(156, 163, 175, 0.8);
+  }
+
+  /* Smooth scrolling for the whole app */
+  .smooth-scroll {
+    scroll-behavior: smooth;
+  }
+}
+
 @layer base {
   :root {
     --background: 210 40% 98%;
@@ -97,5 +136,43 @@
 
   body {
     @apply bg-background text-foreground;
+    scroll-behavior: smooth;
   }
+  
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* AI Sparkle Animations */
+@keyframes sparkle-1 {
+  0%, 100% { 
+    opacity: 0; 
+    transform: translate(0, 0) scale(0);
+  }
+  50% { 
+    opacity: 1; 
+    transform: translate(-8px, -8px) scale(1.5);
+  }
+}
+
+@keyframes sparkle-2 {
+  0%, 100% { 
+    opacity: 0; 
+    transform: translate(0, 0) scale(0);
+  }
+  50% { 
+    opacity: 1; 
+    transform: translate(8px, 8px) scale(1.5);
+  }
+}
+
+.animate-sparkle-1 {
+  animation: sparkle-1 2s ease-in-out infinite;
+  animation-delay: 0s;
+}
+
+.animate-sparkle-2 {
+  animation: sparkle-2 2s ease-in-out infinite;
+  animation-delay: 0.5s;
 }

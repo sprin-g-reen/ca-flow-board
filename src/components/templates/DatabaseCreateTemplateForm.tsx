@@ -1,6 +1,6 @@
 
-import React, { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import React, { useState, useEffect } from 'react';
+import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,14 @@ import { ClientSelector } from '@/components/clients/ClientSelector';
 import { useTemplates } from '@/hooks/useTemplates';
 import { useEmployees } from '@/hooks/useEmployees';
 import { toast } from 'sonner';
+import { Plus, Trash2, GripVertical } from 'lucide-react';
+
+const subtaskSchema = z.object({
+  title: z.string().min(1, 'Subtask title is required'),
+  description: z.string().optional(),
+  dueDate: z.string().optional(),
+  order: z.number(),
+});
 
 const templateSchema = z.object({
   title: z.string().min(1, 'Title is required'),
@@ -26,6 +34,7 @@ const templateSchema = z.object({
   payableTaskType: z.enum(['payable_task_1', 'payable_task_2']).optional(),
   price: z.number().optional(),
   assignedEmployeeId: z.string().optional(),
+  subtasks: z.array(subtaskSchema).optional(),
 });
 
 type TemplateFormData = z.infer<typeof templateSchema>;
@@ -37,14 +46,19 @@ interface Props {
 
 export const DatabaseCreateTemplateForm: React.FC<Props> = ({ onSuccess, templateId }) => {
   const [selectedClient, setSelectedClient] = useState<any>(null);
-  const { createTemplate, isCreating } = useTemplates();
+  const { createTemplate, isCreating, updateTemplate, isUpdating, useTemplate } = useTemplates();
   const { employees } = useEmployees();
+  
+  // Fetch template data if editing
+  const { data: templateData, isLoading: isLoadingTemplate } = useTemplate(templateId || null);
 
   const {
     register,
     handleSubmit,
     setValue,
     watch,
+    reset,
+    control,
     formState: { errors },
   } = useForm<TemplateFormData>({
     resolver: zodResolver(templateSchema),
@@ -52,15 +66,63 @@ export const DatabaseCreateTemplateForm: React.FC<Props> = ({ onSuccess, templat
       category: 'gst',
       isRecurring: false,
       isPayableTask: false,
+      subtasks: [],
     },
   });
+
+  // Use field array for subtasks
+  const { fields, append, remove, move } = useFieldArray({
+    control,
+    name: 'subtasks',
+  });
+
+  // Load template data when editing
+  useEffect(() => {
+    if (templateData && templateId) {
+      console.log('Loading template data for editing:', templateData);
+      
+      // Map API data to form data
+      const formData: Partial<TemplateFormData> = {
+        title: templateData.title,
+        description: templateData.description || '',
+        category: templateData.category,
+        deadline: templateData.deadline || '',
+        isRecurring: templateData.is_recurring || false,
+        recurrencePattern: templateData.recurrence_pattern,
+        isPayableTask: templateData.is_payable_task || false,
+        payableTaskType: templateData.payable_task_type,
+        price: templateData.price,
+        assignedEmployeeId: templateData.assigned_employee_id || '',
+        subtasks: templateData.subtasks || [],
+      };
+
+      // Reset form with template data
+      reset(formData);
+
+      // Set client if exists
+      if (templateData.client_id) {
+        // You might need to fetch client data here
+        setSelectedClient({ id: templateData.client_id });
+      }
+    }
+  }, [templateData, templateId, reset]);
 
   const isRecurring = watch('isRecurring');
   const isPayableTask = watch('isPayableTask');
 
+  // Helper function to add subtask with proper order
+  const addSubtask = () => {
+    append({ 
+      title: '', 
+      description: '', 
+      dueDate: '', 
+      order: fields.length + 1 
+    });
+  };
+
   const onSubmit = async (data: TemplateFormData) => {
     try {
-      const templateData = {
+      const templateRequestData = {
         title: data.title,
         description: data.description,
         category: data.category,
@@ -72,17 +134,35 @@ export const DatabaseCreateTemplateForm: React.FC<Props> = ({ onSuccess, templat
         is_recurring: data.isRecurring,
         is_payable_task: data.isPayableTask,
         assigned_employee_id: data.assignedEmployeeId,
-        subtasks: [],
+        subtasks: data.subtasks || [],
       };
 
-      createTemplate(templateData);
-      toast.success('Template created successfully');
+      if (templateId) {
+        // Update existing template
+        updateTemplate({ id: templateId, ...templateRequestData });
+        toast.success('Template updated successfully');
+      } else {
+        // Create new template
+        createTemplate(templateRequestData);
+        toast.success('Template created successfully');
+      }
+      
       onSuccess?.();
     } catch (error) {
-      console.error('Error creating template:', error);
-      toast.error('Failed to create template');
+      console.error('Error saving template:', error);
+      toast.error(`Failed to ${templateId ? 'update' : 'create'} template`);
     }
   };
+
+  if (isLoadingTemplate) {
+    return (
+      <Card>
+        <CardContent className="p-6">
+          <div className="text-center">Loading template...</div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>
@@ -115,7 +195,10 @@ export const DatabaseCreateTemplateForm: React.FC<Props> = ({ onSuccess, templat
 
           <div className="space-y-2">
             <Label htmlFor="category">Category *</Label>
-            <Select onValueChange={(value) => setValue('category', value as any)}>
+            <Select 
+              value={watch('category')} 
+              onValueChange={(value) => setValue('category', value as any)}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Select category" />
               </SelectTrigger>
@@ -143,14 +226,17 @@ export const DatabaseCreateTemplateForm: React.FC<Props> = ({ onSuccess, templat
 
           <div className="space-y-2">
             <Label htmlFor="assignedEmployeeId">Assigned Employee (Optional)</Label>
-            <Select onValueChange={(value) => setValue('assignedEmployeeId', value)}>
+            <Select 
+              value={watch('assignedEmployeeId')} 
+              onValueChange={(value) => setValue('assignedEmployeeId', value)}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Select an employee" />
               </SelectTrigger>
               <SelectContent>
                 {employees.map((employee) => (
-                  <SelectItem key={employee.id} value={employee.id}>
-                    {employee.employee_id}
+                  <SelectItem key={employee._id} value={employee._id}>
+                    {employee.employee_id || employee.fullName || employee.email}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -166,6 +252,83 @@ export const DatabaseCreateTemplateForm: React.FC<Props> = ({ onSuccess, templat
             />
           </div>
 
+          {/* Subtasks Section */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <Label className="text-base font-medium">Subtasks</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addSubtask}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Subtask
+              </Button>
+            </div>
+            
+            {fields.length > 0 && (
+              <div className="space-y-3">
+                {fields.map((field, index) => (
+                  <Card key={field.id} className="p-4 border-l-4 border-l-blue-500">
+                    <div className="flex items-start gap-3">
+                      <div className="flex-shrink-0 mt-2">
+                        <GripVertical className="h-4 w-4 text-gray-400" />
+                      </div>
+                      <div className="flex-1 space-y-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-gray-500">#{index + 1}</span>
+                          <Input
+                            placeholder="Subtask title"
+                            {...register(`subtasks.${index}.title`)}
+                            className="flex-1"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => remove(index)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <Textarea
+                          placeholder="Subtask description (optional)"
+                          {...register(`subtasks.${index}.description`)}
+                          rows={2}
+                        />
+                        <Input
+                          type="date"
+                          placeholder="Due date"
+                          {...register(`subtasks.${index}.dueDate`)}
+                        />
+                      </div>
+                    </div>
+                    {errors.subtasks?.[index] && (
+                      <div className="mt-2 text-sm text-red-600">
+                        {errors.subtasks[index]?.title?.message}
+                      </div>
+                    )}
+                  </Card>
+                ))}
+              </div>
+            )}
+            
+            {fields.length === 0 && (
+              <div className="text-center py-8 border-2 border-dashed border-gray-200 rounded-lg">
+                <p className="text-gray-500 mb-2">No subtasks added yet</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={addSubtask}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add First Subtask
+                </Button>
+              </div>
+            )}
+          </div>
+
           <div className="flex items-center space-x-2">
             <Switch
               checked={isRecurring}
@@ -177,9 +340,12 @@ export const DatabaseCreateTemplateForm: React.FC<Props> = ({ onSuccess, templat
           {isRecurring && (
             <div className="space-y-2">
               <Label htmlFor="recurrencePattern">Recurrence Pattern</Label>
-              <Select onValueChange={(value) => setValue('recurrencePattern', value as any)}>
+              <Select 
+                value={watch('recurrencePattern')} 
+                onValueChange={(value) => setValue('recurrencePattern', value as any)}
+              >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select recurrence" />
+                  <SelectValue placeholder="Select pattern" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="monthly">Monthly</SelectItem>
@@ -202,7 +368,10 @@ export const DatabaseCreateTemplateForm: React.FC<Props> = ({ onSuccess, templat
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="payableTaskType">Payment Configuration</Label>
-                <Select onValueChange={(value) => setValue('payableTaskType', value as any)}>
+                <Select 
+                  value={watch('payableTaskType')} 
+                  onValueChange={(value) => setValue('payableTaskType', value as any)}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select payment type" />
                   </SelectTrigger>
@@ -226,8 +395,11 @@ export const DatabaseCreateTemplateForm: React.FC<Props> = ({ onSuccess, templat
             </div>
           )}
 
-          <Button type="submit" disabled={isCreating} className="w-full">
-            {isCreating ? 'Creating...' : templateId ? 'Update Template' : 'Create Template'}
+          <Button type="submit" disabled={isCreating || isUpdating} className="w-full">
+            {(isCreating || isUpdating) ? 
+              (templateId ? 'Updating...' : 'Creating...') : 
+              (templateId ? 'Update Template' : 'Create Template')
+            }
           </Button>
         </form>
       </CardContent>

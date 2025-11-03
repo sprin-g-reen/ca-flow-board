@@ -1,12 +1,12 @@
 import { useState, useMemo } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
+import apiClient from '@/services/api';
 
 export const useSearch = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchType, setSearchType] = useState<'all' | 'tasks' | 'clients' | 'payments'>('all');
 
-  // Advanced search with full-text search
+  // Advanced search with API endpoints
   const { data: searchResults, isLoading } = useQuery({
     queryKey: ['search', searchQuery, searchType],
     queryFn: async () => {
@@ -14,42 +14,40 @@ export const useSearch = () => {
 
       const results = { tasks: [], clients: [], payments: [] };
 
-      // Search tasks using full-text search
-      if (searchType === 'all' || searchType === 'tasks') {
-        const { data: tasks } = await supabase
-          .from('tasks')
-          .select('*')
-          .or(`title.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%,client_name.ilike.%${searchQuery}%,category.ilike.%${searchQuery}%`)
-          .eq('is_deleted', false)
-          .limit(20);
-        results.tasks = tasks || [];
+      try {
+        // Search tasks
+        if (searchType === 'all' || searchType === 'tasks') {
+          const tasksResponse = await apiClient.get('/tasks', {
+            search: searchQuery,
+            limit: 20,
+          }) as any;
+          // apiClient returns the parsed body directly. Support both shapes.
+          results.tasks = tasksResponse?.tasks || tasksResponse?.data?.tasks || tasksResponse || [];
+        }
+
+        // Search clients
+        if (searchType === 'all' || searchType === 'clients') {
+          const clientsResponse = await apiClient.get('/clients', {
+            search: searchQuery,
+            limit: 20,
+          }) as any;
+          results.clients = clientsResponse?.clients || clientsResponse?.data || clientsResponse || [];
+        }
+
+        // Search payments/invoices (using invoices as payments)
+        if (searchType === 'all' || searchType === 'payments') {
+          const paymentsResponse = await apiClient.get('/invoices', {
+            search: searchQuery,
+            limit: 20,
+          }) as any;
+          results.payments = paymentsResponse?.invoices || paymentsResponse?.data || paymentsResponse || [];
+        }
+      } catch (error) {
+        console.error('Search error:', error);
+        // Return empty results on error instead of breaking
       }
 
-      // Search clients
-      if (searchType === 'all' || searchType === 'clients') {
-        const { data: clients } = await supabase
-          .from('clients')
-          .select('*')
-          .or(`name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%,phone.ilike.%${searchQuery}%,client_code.ilike.%${searchQuery}%`)
-          .eq('is_deleted', false)
-          .limit(20);
-        results.clients = clients || [];
-      }
-
-      // Search payments
-      if (searchType === 'all' || searchType === 'payments') {
-        const { data: payments } = await supabase
-          .from('payments')
-          .select(`
-            *,
-            clients (name, email)
-          `)
-          .or(`payment_id.ilike.%${searchQuery}%,payment_method.ilike.%${searchQuery}%`)
-          .eq('is_deleted', false)
-          .limit(20);
-        results.payments = payments || [];
-      }
-
+      // Debug log removed for production; keep minimal logging
       return results;
     },
     enabled: searchQuery.length > 2,
