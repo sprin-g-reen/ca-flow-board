@@ -77,9 +77,9 @@ const Login = () => {
     const errors: {email?: string; password?: string} = {};
     
     if (!email.trim()) {
-      errors.email = 'Email is required';
-    } else if (!/\S+@\S+\.\S+/.test(email)) {
-      errors.email = 'Please enter a valid email address';
+      errors.email = 'Username or email is required';
+    } else if (email.trim().length < 3) {
+      errors.email = 'Username or email must be at least 3 characters';
     }
     
     if (!password.trim()) {
@@ -112,7 +112,7 @@ const Login = () => {
       
       if (!result.success) {
         if (result.error?.includes('Invalid credentials')) {
-          const errorMsg = 'Invalid email or password. Please check your credentials and try again.';
+          const errorMsg = 'Invalid username/email or password. Please check your credentials and try again.';
           toast.error(errorMsg);
           setError(errorMsg);
         } else {
@@ -244,17 +244,17 @@ const Login = () => {
                   <form onSubmit={handleSignIn} className="space-y-6">
                     <div className="space-y-2">
                       <Label htmlFor="email" className="text-sm font-semibold text-gray-700">
-                        Email Address
+                        Username or Email
                       </Label>
                       <Input
                         id="email"
-                        type="email"
+                        type="text"
                         value={email}
                         onChange={(e) => {
                           setEmail(e.target.value);
                           if (formErrors.email) setFormErrors(prev => ({...prev, email: undefined}));
                         }}
-                        placeholder="Enter your email"
+                        placeholder="Enter your username or email"
                         className={`h-12 text-base transition-all duration-200 ${formErrors.email ? 'border-red-300 focus:border-red-500' : 'focus:border-ca-blue'}`}
                         required
                         autoFocus

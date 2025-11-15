@@ -15,7 +15,6 @@ import { FadeIn } from "@/components/ui/animations";
 import { toast } from '@/components/ui/enhanced-toast';
 import { NotificationCenter } from '@/components/notifications/NotificationCenter';
 import { useSystemVitals } from '@/hooks/useSystemVitals';
-import StorageWidget from './StorageWidget';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Line } from 'react-chartjs-2';
 import {
@@ -65,6 +64,38 @@ const AppHeader = ({ onAIChatToggle }: AppHeaderProps = {}) => {
   const logoUrl = branding?.logoFile || settingsObj?.company?.invoiceAccounts?.account_1?.branding?.logoFile || '';
   const [showVitalsModal, setShowVitalsModal] = useState(false);
   const [cpuHistory, setCpuHistory] = useState<number[]>([]);
+  const [applicationUptime, setApplicationUptime] = useState<number>(0);
+  const [appUptimeHistory, setAppUptimeHistory] = useState<number[]>([]);
+
+  // Track application start time
+  useEffect(() => {
+    const APP_START_KEY = 'caflow_app_start_time';
+    const existingStartTime = localStorage.getItem(APP_START_KEY);
+    
+    if (!existingStartTime) {
+      // First time the app is loaded, record the start time
+      localStorage.setItem(APP_START_KEY, Date.now().toString());
+    }
+
+    // Update application uptime every minute
+    const updateUptime = () => {
+      const startTime = parseInt(localStorage.getItem(APP_START_KEY) || Date.now().toString());
+      const uptimeSeconds = Math.floor((Date.now() - startTime) / 1000);
+      setApplicationUptime(uptimeSeconds);
+      
+      // Update history for graph (convert seconds to hours)
+      const uptimeHours = uptimeSeconds / 3600;
+      setAppUptimeHistory(prev => {
+        const updated = [...prev, uptimeHours];
+        return updated.slice(-20); // Keep last 20 data points
+      });
+    };
+
+    updateUptime();
+    const interval = setInterval(updateUptime, 60000); // Update every minute
+
+    return () => clearInterval(interval);
+  }, []);
 
   const handleLogout = () => {
     toast.loading('Signing out...');
@@ -142,7 +173,8 @@ const AppHeader = ({ onAIChatToggle }: AppHeaderProps = {}) => {
   return (
     <FadeIn>
       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 shadow-lg">
-        <div className="container flex h-16 items-center justify-between py-4">
+        {/* align header content with main layout (max-w-7xl) so it follows screen width on large displays */}
+        <div className="max-w-7xl mx-auto w-full flex h-16 items-center justify-between py-4 px-6 lg:px-8">
           {/* Left Section */}
           <div className="flex items-center space-x-4">
             <Button 
@@ -181,18 +213,14 @@ const AppHeader = ({ onAIChatToggle }: AppHeaderProps = {}) => {
           
           {/* Right Section */}
           <div className="flex items-center space-x-2">
-            {/* Storage Widget */}
-            <div className="hidden lg:block">
-              <StorageWidget />
-            </div>
-            
             {/* System Vitals */}
             <div
-              className="hidden lg:flex items-center space-x-2 px-3 py-1.5 bg-blue-50 rounded-lg border border-blue-200 cursor-pointer"
+              className="hidden lg:flex items-center space-x-2 px-3 py-1.5 bg-blue-50 rounded-lg border border-blue-200 cursor-pointer hover:bg-blue-100 transition-colors"
               onClick={() => setShowVitalsModal(true)}
               role="button"
               tabIndex={0}
               onKeyDown={(e) => { if (e.key === 'Enter') setShowVitalsModal(true); }}
+              title={`System: ${vitals?.uptime ? Math.floor(vitals.uptime / 3600) + 'h' : 'N/A'} | App: ${applicationUptime ? Math.floor(applicationUptime / 3600) + 'h' : 'N/A'}`}
             >
               {vitalsLoading ? (
                 <>
@@ -312,9 +340,9 @@ const AppHeader = ({ onAIChatToggle }: AppHeaderProps = {}) => {
           </div>
           {/* Vitals Modal */}
           <Dialog open={showVitalsModal} onOpenChange={setShowVitalsModal}>
-            <DialogContent className="max-h-[90vh] flex flex-col max-w-4xl">
-              <DialogHeader className="px-6 pt-6 pb-6">
-                <DialogTitle>System Vitals — Real-time</DialogTitle>
+            <DialogContent className="max-h-[90vh] flex flex-col max-w-4xl p-0">
+              <DialogHeader className="flex-shrink-0 pb-6 px-6 pt-6">
+                <DialogTitle className="text-xl font-semibold">System Vitals — Real-time</DialogTitle>
               </DialogHeader>
               <div className="flex-1 overflow-y-auto min-h-0 px-6 pb-6">
                 <div className="mb-4 flex items-center justify-between">
@@ -329,84 +357,145 @@ const AppHeader = ({ onAIChatToggle }: AppHeaderProps = {}) => {
                 {vitalsLoading ? (
                   <p className="text-sm text-muted-foreground">Loading vitals...</p>
                 ) : vitals ? (
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-sm font-semibold">CPU</h4>
-                        <span className="text-xs text-muted-foreground">Load: {vitals.cpu?.load || 'N/A'}</span>
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      {/* CPU Graph */}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-sm font-semibold">CPU</h4>
+                          <span className="text-xs text-muted-foreground">Load: {vitals.cpu?.load || 'N/A'}</span>
+                        </div>
+                        <div className="h-32">
+                          <Line
+                            data={{
+                              labels: cpuHistory.map((_, i) => i + 1),
+                              datasets: [
+                                {
+                                  label: 'CPU %',
+                                  data: cpuHistory,
+                                  fill: true,
+                                  backgroundColor: 'rgba(59,130,246,0.12)',
+                                  borderColor: 'rgba(59,130,246,0.9)',
+                                  tension: 0.3,
+                                  pointRadius: 0
+                                }
+                              ]
+                            }}
+                            options={{
+                              responsive: true,
+                              maintainAspectRatio: false,
+                              scales: {
+                                x: { display: false },
+                                y: { display: true, suggestedMin: 0, suggestedMax: 100 }
+                              },
+                              plugins: { legend: { display: false }, tooltip: { enabled: true } }
+                            }}
+                          />
+                        </div>
+                        <div className="grid grid-cols-3 gap-3 text-xs">
+                          <div className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-blue-500" />User: {vitals.cpu?.user ?? 'N/A'}</div>
+                          <div className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-indigo-500" />System: {vitals.cpu?.system ?? 'N/A'}</div>
+                          <div className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-gray-400" />Idle: {vitals.cpu?.idle ?? 'N/A'}</div>
+                        </div>
                       </div>
-                      <div className="h-32">
-                        <Line
-                          data={{
-                            labels: cpuHistory.map((_, i) => i + 1),
-                            datasets: [
-                              {
-                                label: 'CPU %',
-                                data: cpuHistory,
-                                fill: true,
-                                backgroundColor: 'rgba(59,130,246,0.12)',
-                                borderColor: 'rgba(59,130,246,0.9)',
-                                tension: 0.3,
-                                pointRadius: 0
+
+                      {/* Application Uptime Graph */}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-sm font-semibold">Application Uptime</h4>
+                          <span className="text-xs text-muted-foreground">
+                            {applicationUptime ? `${Math.floor(applicationUptime/3600)}h ${Math.floor((applicationUptime%3600)/60)}m` : 'N/A'}
+                          </span>
+                        </div>
+                        <div className="h-32">
+                          <Line
+                            data={{
+                              labels: appUptimeHistory.map((_, i) => i + 1),
+                              datasets: [
+                                {
+                                  label: 'Uptime (hours)',
+                                  data: appUptimeHistory,
+                                  fill: true,
+                                  backgroundColor: 'rgba(16,185,129,0.12)',
+                                  borderColor: 'rgba(16,185,129,0.9)',
+                                  tension: 0.3,
+                                  pointRadius: 0
+                                }
+                              ]
+                            }}
+                            options={{
+                              responsive: true,
+                              maintainAspectRatio: false,
+                              scales: {
+                                x: { display: false },
+                                y: { display: true, suggestedMin: 0 }
+                              },
+                              plugins: { 
+                                legend: { display: false }, 
+                                tooltip: { 
+                                  enabled: true,
+                                  callbacks: {
+                                    label: function(context) {
+                                      const hours = Math.floor(context.parsed.y);
+                                      const minutes = Math.floor((context.parsed.y % 1) * 60);
+                                      return `Uptime: ${hours}h ${minutes}m`;
+                                    }
+                                  }
+                                } 
                               }
-                            ]
-                          }}
-                          options={{
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            scales: {
-                              x: { display: false },
-                              y: { display: true, suggestedMin: 0, suggestedMax: 100 }
-                            },
-                            plugins: { legend: { display: false }, tooltip: { enabled: true } }
-                          }}
-                        />
-                      </div>
-                      <div className="grid grid-cols-3 gap-3 text-xs">
-                        <div className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-blue-500" />User: {vitals.cpu?.user ?? 'N/A'}</div>
-                        <div className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-indigo-500" />System: {vitals.cpu?.system ?? 'N/A'}</div>
-                        <div className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-gray-400" />Idle: {vitals.cpu?.idle ?? 'N/A'}</div>
+                            }}
+                          />
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          Application has been running in this session
+                        </div>
                       </div>
                     </div>
 
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-sm font-semibold">Memory</h4>
-                        <span className="text-xs text-muted-foreground">Usage: {vitals.memory?.usage || 'N/A'}</span>
-                      </div>
-                      <div className="rounded border p-3 bg-white">
-                        <div className="text-xs text-muted-foreground">Used: <span className="font-medium text-gray-900">{vitals.memory?.used || 'N/A'}</span> / <span className="font-medium text-gray-900">{vitals.memory?.total || 'N/A'}</span></div>
-                        <div className="mt-2 h-2 bg-gray-100 rounded overflow-hidden">
-                          <div className="h-full bg-blue-500" style={{ width: toPercentString(vitals.memory?.usage as any) }} />
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      {/* Memory */}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-sm font-semibold">Memory</h4>
+                          <span className="text-xs text-muted-foreground">Usage: {vitals.memory?.usage || 'N/A'}</span>
                         </div>
-                      </div>
-
-                      <div>
-                        <h4 className="text-sm font-semibold">Uptime</h4>
-                        <p className="text-xs text-muted-foreground">{vitals.uptime ? `${Math.floor(vitals.uptime/3600)}h ${Math.floor((vitals.uptime%3600)/60)}m` : 'N/A'}</p>
-                        <p className="text-xs mt-1">Restart frequency can indicate instability; monitor if uptime is low or fluctuating.</p>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
                         <div className="rounded border p-3 bg-white">
-                          <h4 className="text-sm font-semibold">Threads</h4>
-                          <div className="text-sm font-medium text-gray-900">{(vitals as any)?.threads ?? (vitals as any)?.threadCount ?? 'N/A'}</div>
-                          <p className="text-xs text-muted-foreground mt-1">Active thread count on the host</p>
+                          <div className="text-xs text-muted-foreground">Used: <span className="font-medium text-gray-900">{vitals.memory?.used || 'N/A'}</span> / <span className="font-medium text-gray-900">{vitals.memory?.total || 'N/A'}</span></div>
+                          <div className="mt-2 h-2 bg-gray-100 rounded overflow-hidden">
+                            <div className="h-full bg-blue-500" style={{ width: toPercentString(vitals.memory?.usage as any) }} />
+                          </div>
                         </div>
 
-                        <div className="rounded border p-3 bg-white">
-                          <h4 className="text-sm font-semibold">Processes</h4>
-                          <div className="text-sm font-medium text-gray-900">{(vitals as any)?.processes ?? (vitals as any)?.processCount ?? 'N/A'}</div>
-                          <p className="text-xs text-muted-foreground mt-1">Number of running processes</p>
+                        <div>
+                          <h4 className="text-sm font-semibold">System Uptime</h4>
+                          <p className="text-xs text-muted-foreground">{vitals.uptime ? `${Math.floor(vitals.uptime/3600)}h ${Math.floor((vitals.uptime%3600)/60)}m` : 'N/A'}</p>
+                          <p className="text-xs mt-1 text-gray-500">Server has been running since last reboot</p>
                         </div>
                       </div>
 
-                      <div className="rounded border p-3 bg-white mt-3">
-                        <h4 className="text-sm font-semibold mb-2">Load Average</h4>
-                        <div className="grid grid-cols-3 gap-3 text-xs">
-                          <div>1m: <span className="font-medium text-gray-900">{vitals.loadAverages?.oneMin ?? 'N/A'}</span></div>
-                          <div>5m: <span className="font-medium text-gray-900">{vitals.loadAverages?.fiveMin ?? 'N/A'}</span></div>
-                          <div>15m: <span className="font-medium text-gray-900">{vitals.loadAverages?.fifteenMin ?? 'N/A'}</span></div>
+                      {/* System Stats */}
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="rounded border p-3 bg-white">
+                            <h4 className="text-sm font-semibold">Threads</h4>
+                            <div className="text-sm font-medium text-gray-900">{(vitals as any)?.threads ?? (vitals as any)?.threadCount ?? 'N/A'}</div>
+                            <p className="text-xs text-muted-foreground mt-1">Active thread count on the host</p>
+                          </div>
+
+                          <div className="rounded border p-3 bg-white">
+                            <h4 className="text-sm font-semibold">Processes</h4>
+                            <div className="text-sm font-medium text-gray-900">{(vitals as any)?.processes ?? (vitals as any)?.processCount ?? 'N/A'}</div>
+                            <p className="text-xs text-muted-foreground mt-1">Number of running processes</p>
+                          </div>
+                        </div>
+
+                        <div className="rounded border p-3 bg-white">
+                          <h4 className="text-sm font-semibold mb-2">Load Average</h4>
+                          <div className="grid grid-cols-3 gap-3 text-xs">
+                            <div>1m: <span className="font-medium text-gray-900">{vitals.loadAverages?.oneMin ?? 'N/A'}</span></div>
+                            <div>5m: <span className="font-medium text-gray-900">{vitals.loadAverages?.fiveMin ?? 'N/A'}</span></div>
+                            <div>15m: <span className="font-medium text-gray-900">{vitals.loadAverages?.fifteenMin ?? 'N/A'}</span></div>
+                          </div>
                         </div>
                       </div>
                     </div>

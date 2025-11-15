@@ -111,8 +111,10 @@ async function quickInit() {
     
     // Create owner with pre-hashed password
     const owner = await User.create({
+      username: 'auditor',
       email: OWNER_DATA.email,
       password: hashedPassword,
+      name: OWNER_DATA.fullName,
       fullName: OWNER_DATA.fullName,
       role: 'owner',
       phone: OWNER_DATA.phone,

@@ -1,11 +1,61 @@
 import express from 'express';
 import { body, validationResult } from 'express-validator';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs/promises';
 import auth from '../middleware/auth.js';
 import Task from '../models/Task.js';
 import TaskTemplate from '../models/TaskTemplate.js';
 import NotificationService from '../services/notificationService.js';
 
 const router = express.Router();
+
+// Configure multer for task document uploads
+const storage = multer.diskStorage({
+  destination: async (req, file, cb) => {
+    const uploadPath = path.join(process.cwd(), 'uploads', 'task-documents');
+    try {
+      await fs.mkdir(uploadPath, { recursive: true });
+      cb(null, uploadPath);
+    } catch (error) {
+      cb(error, null);
+    }
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const extension = path.extname(file.originalname);
+    cb(null, `task-doc-${uniqueSuffix}${extension}`);
+  }
+});
+
+const fileFilter = (req, file, cb) => {
+  const allowedTypes = [
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'text/plain',
+    'application/rtf'
+  ];
+
+  if (allowedTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid file type. Only PDF, Word, Excel, images, and text files are allowed.'), false);
+  }
+};
+
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB limit
+  },
+  fileFilter: fileFilter
+});
 
 // @desc    Get tasks
 // @route   GET /api/tasks
@@ -285,6 +335,19 @@ router.post('/', auth, [
     }
     // ============ END AUTO QUOTE DRAFT CREATION ============
 
+    // ============ REAL-TIME WEBSOCKET BROADCAST ============
+    // Broadcast new task to all connected clients in the same firm
+    try {
+      const taskWS = req.app.get('taskWS');
+      if (taskWS) {
+        taskWS.broadcastTaskUpdate(populatedTask, 'create', req.user._id.toString());
+      }
+    } catch (wsError) {
+      console.error('WebSocket broadcast error:', wsError);
+      // Don't fail the request if WebSocket broadcast fails
+    }
+    // ============ END WEBSOCKET BROADCAST ============
+
     // Send notification to assigned user
     if (populatedTask.assignedTo && populatedTask.assignedTo._id.toString() !== req.user._id.toString()) {
       try {
@@ -429,6 +492,20 @@ router.put('/:id', auth, async (req, res) => {
       assignedTo: updatedTask.assignedTo,
       collaborators: updatedTask.collaborators
     });
+
+    // ============ REAL-TIME WEBSOCKET BROADCAST ============
+    // Broadcast task update to all connected clients in the same firm
+    try {
+      const taskWS = req.app.get('taskWS');
+      if (taskWS) {
+        const action = req.body.status && req.body.status !== task.status ? 'status_change' : 'update';
+        taskWS.broadcastTaskUpdate(updatedTask, action, req.user._id.toString());
+      }
+    } catch (wsError) {
+      console.error('WebSocket broadcast error:', wsError);
+      // Don't fail the request if WebSocket broadcast fails
+    }
+    // ============ END WEBSOCKET BROADCAST ============
 
     // Send notifications for task updates (only for status changes to avoid spam)
     if (req.body.status && req.body.status !== task.status) {
@@ -626,7 +703,7 @@ router.put('/:id', auth, async (req, res) => {
 // @access  Private
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const task = await Task.findById(req.params.id);
+    const task = await Task.findById(req.params.id).populate('firm', 'name');
     
     if (!task) {
       return res.status(404).json({
@@ -647,6 +724,19 @@ router.delete('/:id', auth, async (req, res) => {
     }
 
     await Task.findByIdAndDelete(req.params.id);
+
+    // ============ REAL-TIME WEBSOCKET BROADCAST ============
+    // Broadcast task deletion to all connected clients in the same firm
+    try {
+      const taskWS = req.app.get('taskWS');
+      if (taskWS) {
+        taskWS.broadcastTaskUpdate({ ...task.toObject(), _id: req.params.id }, 'delete', req.user._id.toString());
+      }
+    } catch (wsError) {
+      console.error('WebSocket broadcast error:', wsError);
+      // Don't fail the request if WebSocket broadcast fails
+    }
+    // ============ END WEBSOCKET BROADCAST ============
 
     res.json({
       success: true,
@@ -1108,6 +1198,215 @@ router.post('/bulk-archive', auth, async (req, res) => {
     });
   } catch (error) {
     console.error('Bulk archive tasks error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+});
+
+// @desc    Upload document to task
+// @route   POST /api/tasks/:id/documents
+// @access  Private
+router.post('/:id/documents', auth, upload.single('file'), async (req, res) => {
+  try {
+    const task = await Task.findOne({
+      _id: req.params.id,
+      firm: req.user.firmId._id
+    });
+
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        message: 'Task not found'
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No file uploaded'
+      });
+    }
+
+    const document = {
+      name: req.file.originalname,
+      url: `/uploads/task-documents/${req.file.filename}`,
+      type: req.file.mimetype,
+      size: req.file.size,
+      uploadedBy: req.user._id,
+      uploadedAt: new Date()
+    };
+
+    task.documents.push(document);
+    await task.save();
+
+    // Populate the uploaded document
+    const updatedTask = await Task.findById(task._id)
+      .populate('documents.uploadedBy', 'fullName email');
+
+    // Broadcast via WebSocket
+    if (global.taskWebSocketService) {
+      global.taskWebSocketService.broadcastTaskUpdate(updatedTask);
+    }
+
+    res.json({
+      success: true,
+      message: 'Document uploaded successfully',
+      data: updatedTask.documents[updatedTask.documents.length - 1]
+    });
+  } catch (error) {
+    console.error('Upload task document error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+});
+
+// @desc    Get task documents
+// @route   GET /api/tasks/:id/documents
+// @access  Private
+router.get('/:id/documents', auth, async (req, res) => {
+  try {
+    const task = await Task.findOne({
+      _id: req.params.id,
+      firm: req.user.firmId._id
+    })
+      .populate('documents.uploadedBy', 'fullName email')
+      .select('documents');
+
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        message: 'Task not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: task.documents || []
+    });
+  } catch (error) {
+    console.error('Get task documents error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+});
+
+// @desc    Delete task document
+// @route   DELETE /api/tasks/:id/documents/:documentId
+// @access  Private
+router.delete('/:id/documents/:documentId', auth, async (req, res) => {
+  try {
+    const task = await Task.findOne({
+      _id: req.params.id,
+      firm: req.user.firmId._id
+    });
+
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        message: 'Task not found'
+      });
+    }
+
+    const documentIndex = task.documents.findIndex(
+      doc => doc._id.toString() === req.params.documentId
+    );
+
+    if (documentIndex === -1) {
+      return res.status(404).json({
+        success: false,
+        message: 'Document not found'
+      });
+    }
+
+    const document = task.documents[documentIndex];
+    
+    // Delete file from filesystem
+    try {
+      const filePath = path.join(process.cwd(), document.url);
+      await fs.unlink(filePath);
+    } catch (err) {
+      console.error('Error deleting file:', err);
+      // Continue even if file deletion fails
+    }
+
+    // Remove document from array
+    task.documents.splice(documentIndex, 1);
+    await task.save();
+
+    // Broadcast via WebSocket
+    if (global.taskWebSocketService) {
+      const updatedTask = await Task.findById(task._id)
+        .populate('assignedTo', 'fullName email')
+        .populate('client', 'name email');
+      global.taskWebSocketService.broadcastTaskUpdate(updatedTask);
+    }
+
+    res.json({
+      success: true,
+      message: 'Document deleted successfully'
+    });
+  } catch (error) {
+    console.error('Delete task document error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+});
+
+// @desc    Download task document
+// @route   GET /api/tasks/:id/documents/:documentId/download
+// @access  Private
+router.get('/:id/documents/:documentId/download', auth, async (req, res) => {
+  try {
+    const task = await Task.findOne({
+      _id: req.params.id,
+      firm: req.user.firmId._id
+    });
+
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        message: 'Task not found'
+      });
+    }
+
+    const document = task.documents.find(
+      doc => doc._id.toString() === req.params.documentId
+    );
+
+    if (!document) {
+      return res.status(404).json({
+        success: false,
+        message: 'Document not found'
+      });
+    }
+
+    const filePath = path.join(process.cwd(), document.url);
+    
+    // Check if file exists
+    try {
+      await fs.access(filePath);
+    } catch (err) {
+      return res.status(404).json({
+        success: false,
+        message: 'File not found on server'
+      });
+    }
+
+    res.download(filePath, document.name);
+  } catch (error) {
+    console.error('Download task document error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error',

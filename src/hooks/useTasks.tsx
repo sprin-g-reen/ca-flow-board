@@ -177,9 +177,10 @@ export const useTasks = () => {
         throw err;
       }
     },
-    refetchInterval: isRealTime ? 30000 : false, // Refetch every 30 seconds when real-time is enabled
-    refetchIntervalInBackground: true, // Continue refetching when window is not focused
-    refetchOnWindowFocus: true, // Refetch when window gains focus
+    // Disable polling when realtime is on - WebSocket will handle updates
+    refetchInterval: false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true, // Still refetch when window gains focus
     staleTime: 25000, // Consider data stale after 25 seconds
     retry: (failureCount, error) => {
       // Don't retry on authentication errors
@@ -190,22 +191,8 @@ export const useTasks = () => {
     },
   });
 
-  // Real-time effect for automatic data refresh
-  useEffect(() => {
-    if (!isRealTime) return;
-
-    const interval = setInterval(() => {
-      // Only refetch if there are no pending mutations to avoid conflicts
-      const mutations = queryClient.getMutationCache().getAll();
-      const hasPendingMutations = mutations.some(mutation => mutation.state.status === 'pending');
-      
-      if (!hasPendingMutations) {
-        queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      }
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [isRealTime, queryClient]);
+  // Real-time effect is now handled by WebSocket in useTaskWebSocket hook
+  // Removed polling logic to avoid redundant network requests
 
   const addTask = useMutation({
     mutationFn: async (taskData: CreateTaskData) => {

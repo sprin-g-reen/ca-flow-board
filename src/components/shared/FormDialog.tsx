@@ -39,16 +39,16 @@ export function FormDialog({
 }: FormDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={`max-h-[90vh] flex flex-col max-w-4xl ${className || ''}`}>
-        <DialogHeader className="flex-shrink-0 pb-4">
+      <DialogContent className={`max-h-[90vh] flex flex-col max-w-4xl p-0 ${className || ''}`}>
+        <DialogHeader className="flex-shrink-0 pb-6 px-6 pt-6">
           <DialogTitle className="text-xl font-semibold">{title}</DialogTitle>
           {description && <DialogDescription className="text-sm text-gray-600 mt-2">{description}</DialogDescription>}
         </DialogHeader>
-        <div className="flex-1 overflow-y-auto min-h-0 px-6">
+        <div className="flex-1 overflow-y-auto min-h-0 px-6 pb-2">
           {children}
         </div>
         {showFooter && (
-          <DialogFooter className="flex-shrink-0 pt-6 border-t border-gray-200 mt-4">
+          <DialogFooter className="flex-shrink-0 pt-6 pb-2 px-6 border-t border-gray-200 mt-4">
             <Button 
               variant="outline" 
               onClick={() => onOpenChange(false)}

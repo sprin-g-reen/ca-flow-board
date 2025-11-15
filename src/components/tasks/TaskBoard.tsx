@@ -47,8 +47,10 @@ import TaskColumn from './TaskColumn';
 import { setBoardView } from '@/store/slices/uiSlice';
 import TaskFilters from './TaskFilters';
 import { useTasks } from '@/hooks/useTasks';
+import { useTaskWebSocket } from '@/hooks/useTaskWebSocket';
 import { useEmployees } from '@/hooks/useEmployees';
 import { toast } from 'sonner';
+import Swal from 'sweetalert2';
 
 interface TaskBoardProps {
   tasks: Task[];
@@ -88,6 +90,9 @@ const TaskBoard = ({ tasks, basePath }: TaskBoardProps) => {
     refreshTasks
   } = useTasks();
   const { employees } = useEmployees();
+  
+  // Initialize WebSocket connection for real-time updates
+  const { isConnected: wsConnected } = useTaskWebSocket(isRealTime);
 
   // Export functions
   const exportToCSV = () => {
@@ -221,15 +226,26 @@ const TaskBoard = ({ tasks, basePath }: TaskBoardProps) => {
   const handleBulkDelete = async () => {
     if (selectedTasks.length === 0) return;
     
-    const confirmMessage = `Are you sure you want to delete ${selectedTasks.length} task${selectedTasks.length > 1 ? 's' : ''}?`;
-    if (!confirm(confirmMessage)) return;
+    const result = await Swal.fire({
+      title: 'Delete Tasks?',
+      text: `Are you sure you want to delete ${selectedTasks.length} task${selectedTasks.length > 1 ? 's' : ''}?`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#3085d6',
+      cancelButtonColor: '#d33',
+      confirmButtonText: 'Yes, delete them!'
+    });
+
+    if (!result.isConfirmed) return;
 
     try {
       await bulkDeleteTasks(selectedTasks);
       setSelectedTasks([]);
       setIsSelectAllChecked(false);
+      Swal.fire('Deleted!', 'Tasks have been deleted.', 'success');
     } catch (error) {
       console.error('Failed to delete tasks:', error);
+      Swal.fire('Error!', 'Failed to delete tasks.', 'error');
     }
   };
 
@@ -359,17 +375,31 @@ const TaskBoard = ({ tasks, basePath }: TaskBoardProps) => {
           {/* Real-time Status Indicator */}
           <div className="flex items-center gap-2">
             <Badge 
-              variant={isRealTime ? "default" : "secondary"} 
+              variant={isRealTime && wsConnected ? "default" : "secondary"} 
               className={`flex items-center gap-1 ${
-                isRealTime 
+                isRealTime && wsConnected
                   ? 'bg-green-100 text-green-800 hover:bg-green-200' 
+                  : isRealTime && !wsConnected
+                  ? 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
+              title={
+                isRealTime && wsConnected 
+                  ? 'Real-time updates active (WebSocket connected)' 
+                  : isRealTime && !wsConnected 
+                  ? 'Connecting to real-time updates...'
+                  : 'Real-time updates disabled'
+              }
             >
-              {isRealTime ? (
+              {isRealTime && wsConnected ? (
                 <>
                   <Wifi className="h-3 w-3" />
                   Live
+                </>
+              ) : isRealTime && !wsConnected ? (
+                <>
+                  <RefreshCw className="h-3 w-3 animate-spin" />
+                  Connecting
                 </>
               ) : (
                 <>

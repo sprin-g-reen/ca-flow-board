@@ -22,6 +22,7 @@ import {
 import { Trash2, RefreshCw, AlertTriangle, Loader2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
+import Swal from 'sweetalert2';
 
 const formatFileSize = (bytes: number): string => {
   if (bytes === 0) return '-';
@@ -135,13 +136,23 @@ export default function RecycleBin() {
     restoreMutation.mutate(itemsToRestore);
   };
 
-  const handlePermanentDelete = () => {
+  const handlePermanentDelete = async () => {
     if (selectedItems.size === 0) {
       toast.error('Please select items to delete');
       return;
     }
 
-    if (!confirm(`Are you sure you want to permanently delete ${selectedItems.size} items? This action cannot be undone.`)) {
+    const result = await Swal.fire({
+      title: 'Permanent Delete?',
+      text: `Are you sure you want to permanently delete ${selectedItems.size} items? This action cannot be undone.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#3085d6',
+      cancelButtonColor: '#d33',
+      confirmButtonText: 'Yes, delete permanently!'
+    });
+
+    if (!result.isConfirmed) {
       return;
     }
 
@@ -152,13 +163,23 @@ export default function RecycleBin() {
     deleteMutation.mutate(itemsToDelete);
   };
 
-  const handleEmptyBin = () => {
+  const handleEmptyBin = async () => {
     if (items.length === 0) {
       toast.error('Recycle bin is already empty');
       return;
     }
 
-    if (!confirm(`Are you sure you want to permanently delete ALL ${items.length} items? This action cannot be undone.`)) {
+    const result = await Swal.fire({
+      title: 'Empty Recycle Bin?',
+      text: `Are you sure you want to permanently delete ALL ${items.length} items? This action cannot be undone.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Yes, empty the bin!'
+    });
+
+    if (!result.isConfirmed) {
       return;
     }
 
@@ -328,7 +349,17 @@ export default function RecycleBin() {
                     </TableCell>
                     <TableCell>{formatFileSize(item.size)}</TableCell>
                     <TableCell>
-                      {formatDistanceToNow(new Date(item.deletedAt), { addSuffix: true })}
+                      {(() => {
+                        try {
+                          const d = item.deletedAt ? new Date(item.deletedAt) : null;
+                          if (d && !isNaN(d.getTime())) {
+                            return formatDistanceToNow(d, { addSuffix: true });
+                          }
+                        } catch (e) {
+                          // fallthrough
+                        }
+                        return '-';
+                      })()}
                     </TableCell>
                     <TableCell>
                       {item.deletedBy?.name || '-'}

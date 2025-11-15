@@ -1,6 +1,7 @@
 
 import { useState, useEffect } from 'react';
 import { FileText, Plus, Download, Mail, Eye, Edit, Trash2, Check, X } from 'lucide-react';
+import Swal from 'sweetalert2';
 import { format } from 'date-fns';
 import {
   Card,
@@ -123,12 +124,20 @@ const OwnerInvoices = () => {
   };
 
   const handleDeleteInvoice = async (invoiceId: string) => {
-    if (confirm('Are you sure you want to delete this invoice?')) {
-      try {
-        await deleteInvoiceMutation.mutateAsync(invoiceId);
-      } catch (error) {
-        console.error('Failed to delete invoice:', error);
-      }
+    const result = await Swal.fire({
+      title: 'Delete invoice? ',
+      text: 'Are you sure you want to delete this invoice?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Delete',
+      cancelButtonText: 'Cancel'
+    });
+    if (!result.isConfirmed) return;
+    try {
+      await deleteInvoiceMutation.mutateAsync(invoiceId);
+    } catch (error) {
+      console.error('Failed to delete invoice:', error);
+      await Swal.fire({ title: 'Error', text: 'Failed to delete invoice', icon: 'error' });
     }
   };
 
@@ -155,14 +164,15 @@ const OwnerInvoices = () => {
     if (selectedInvoices.length === 0) return;
     
     const confirmMessage = `Are you sure you want to delete ${selectedInvoices.length} invoice${selectedInvoices.length > 1 ? 's' : ''}?`;
-    if (!confirm(confirmMessage)) return;
-
+    const result = await Swal.fire({ title: 'Confirm delete', text: confirmMessage, icon: 'warning', showCancelButton: true, confirmButtonText: 'Delete' });
+    if (!result.isConfirmed) return;
     try {
       await bulkDeleteMutation.mutateAsync(selectedInvoices);
       setSelectedInvoices([]);
       setIsSelectAllChecked(false);
     } catch (error) {
       console.error('Failed to delete invoices:', error);
+      await Swal.fire({ title: 'Error', text: 'Failed to delete invoices', icon: 'error' });
     }
   };
 
@@ -181,10 +191,10 @@ const OwnerInvoices = () => {
     }
   };
 
-  const handleBulkExport = () => {
+  const handleBulkExport = async () => {
     // TODO: Implement bulk export functionality
     console.log('Exporting invoices:', selectedInvoices);
-    alert('Bulk export feature coming soon!');
+    await Swal.fire({ title: 'Not implemented', text: 'Bulk export feature coming soon!', icon: 'info' });
   };
 
   const clearSelection = () => {

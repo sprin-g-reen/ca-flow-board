@@ -2,10 +2,20 @@ import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 
 const userSchema = new mongoose.Schema({
+  username: {
+    type: String,
+    required: [true, 'Username is required'],
+    unique: true,
+    trim: true,
+    lowercase: true,
+    minlength: [3, 'Username must be at least 3 characters'],
+    maxlength: [30, 'Username cannot exceed 30 characters'],
+    match: [/^[a-z0-9._-]{3,30}$/, 'Username may contain letters, numbers, dot, underscore and hyphen']
+  },
   email: {
     type: String,
-    required: [true, 'Email is required'],
-    unique: true,
+    required: false,
+    unique: false,
     lowercase: true,
     trim: true,
     match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email']
@@ -159,7 +169,24 @@ const userSchema = new mongoose.Schema({
     default: false
   },
   emailVerificationToken: String,
-  emailVerificationExpires: Date
+  emailVerificationExpires: Date,
+  // Two-Factor Authentication (TOTP)
+  twoFactorEnabled: {
+    type: Boolean,
+    default: false
+  },
+  twoFactorSecret: {
+    type: String,
+    select: false // Don't include in queries by default
+  },
+  twoFactorBackupCodes: {
+    type: [String],
+    select: false // Don't include in queries by default
+  },
+  twoFactorSetupComplete: {
+    type: Boolean,
+    default: false
+  }
 }, {
   timestamps: true,
   toJSON: { virtuals: true },
@@ -216,6 +243,21 @@ userSchema.methods.changedPasswordAfter = function(JWTTimestamp) {
 // Generate auto IDs for employees and clients
 userSchema.pre('save', async function(next) {
   if (this.isNew) {
+    // Auto-generate username from fullName if not provided
+    if (!this.username && this.fullName) {
+      const firstName = this.fullName.trim().split(/\s+/)[0];
+      const baseUsername = firstName.toLowerCase().replace(/[^a-z0-9]/g, '');
+      
+      // Ensure uniqueness
+      let username = baseUsername;
+      let counter = 1;
+      while (await this.constructor.findOne({ username })) {
+        username = `${baseUsername}${counter}`;
+        counter++;
+      }
+      this.username = username;
+    }
+    
     if (this.role === 'employee' && !this.employeeId) {
       const count = await this.constructor.countDocuments({ role: 'employee', firmId: this.firmId });
       this.employeeId = `EMP${String(count + 1).padStart(4, '0')}`;

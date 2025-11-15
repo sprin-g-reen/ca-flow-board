@@ -511,12 +511,13 @@ export const RecurrenceConfiguration: React.FC<RecurrenceConfigurationProps> = (
             </Button>
           </DialogTrigger>
           
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Configure Recurrence Pattern</DialogTitle>
+          <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0">
+            <DialogHeader className="flex-shrink-0 pb-6 px-6 pt-6">
+              <DialogTitle className="text-xl font-semibold">Configure Recurrence Pattern</DialogTitle>
             </DialogHeader>
             
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="flex-1 overflow-y-auto min-h-0 px-6 pb-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Left Column - Presets */}
               <div className="space-y-4">
                 <div>
@@ -608,6 +609,7 @@ export const RecurrenceConfiguration: React.FC<RecurrenceConfigurationProps> = (
                   </Button>
                 </div>
               </div>
+            </div>
             </div>
           </DialogContent>
         </Dialog>

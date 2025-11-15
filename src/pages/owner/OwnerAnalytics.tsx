@@ -24,7 +24,8 @@ import { RealTimeTaskMonitor } from '@/components/dashboard/RealTimeTaskMonitor'
 import { EmployeePerformanceMetrics } from '@/components/dashboard/EmployeePerformanceMetrics';
 import { RevenueTracker } from '@/components/dashboard/RevenueTracker';
 import { ClientEngagementAnalytics } from '@/components/dashboard/ClientEngagementAnalytics';
-import { BarChart, Users, DollarSign, UserCheck } from 'lucide-react';
+import { DatabaseLogs } from '@/components/analytics/DatabaseLogs';
+import { BarChart, Users, DollarSign, UserCheck, Database } from 'lucide-react';
 
 const OwnerAnalytics = () => {
   const [timeRange, setTimeRange] = useState('year');
@@ -47,7 +48,7 @@ const OwnerAnalytics = () => {
       </div>
 
       <Tabs defaultValue="tasks" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="tasks" className="flex items-center gap-2">
             <BarChart className="h-4 w-4" />
             Real-Time Tasks
@@ -63,6 +64,10 @@ const OwnerAnalytics = () => {
           <TabsTrigger value="clients" className="flex items-center gap-2">
             <UserCheck className="h-4 w-4" />
             Client Engagement
+          </TabsTrigger>
+          <TabsTrigger value="logs" className="flex items-center gap-2">
+            <Database className="h-4 w-4" />
+            Database Logs
           </TabsTrigger>
         </TabsList>
         
@@ -132,6 +137,10 @@ const OwnerAnalytics = () => {
               <ClientEngagementAnalytics />
             </CardContent>
           </Card>
+        </TabsContent>
+        
+        <TabsContent value="logs">
+          <DatabaseLogs />
         </TabsContent>
       </Tabs>
     </div>

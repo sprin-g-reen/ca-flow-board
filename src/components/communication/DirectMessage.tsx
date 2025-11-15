@@ -41,14 +41,21 @@ export const DirectMessage = ({ recipientId, recipientName }: { recipientId: str
   };
 
   return (
-    <div className="space-y-4">
-      <Textarea
-        value={message}
-        onChange={(e) => setMessage(e.target.value)}
-        placeholder={`Message ${recipientName}...`}
-        rows={4}
-      />
-      <Button onClick={handleSendMessage} className="w-full">
+    <div className="space-y-6 p-1">
+      <div className="space-y-2">
+        <Textarea
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          placeholder={`Message ${recipientName}...`}
+          rows={6}
+          className="resize-none focus-visible:ring-2 focus-visible:ring-blue-500"
+        />
+      </div>
+      <Button 
+        onClick={handleSendMessage} 
+        className="w-full h-11 text-base font-medium"
+        disabled={message.trim() === ''}
+      >
         <Send className="h-4 w-4 mr-2" />
         Send Message
       </Button>

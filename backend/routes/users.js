@@ -23,7 +23,7 @@ router.get('/', auth, requireOwnerOrAdmin, async (req, res) => {
     if (search) {
       filter.$or = [
         { fullName: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } }
+        { username: { $regex: search, $options: 'i' } }
       ];
     }
 
@@ -87,7 +87,7 @@ router.get('/:id', auth, requireUserManagementAccess, async (req, res) => {
 // @route   POST /api/users
 // @access  Private (Admin/Owner)
 router.post('/', auth, requireOwnerOrAdmin, [
-  body('email').isEmail().normalizeEmail(),
+  body('username').optional().isLength({ min: 3 }).trim().matches(/^[a-zA-Z0-9._-]{3,30}$/),
   body('password').isLength({ min: 6 }),
   body('fullName').trim().isLength({ min: 2 }),
   body('role').isIn(['admin', 'employee', 'client'])
@@ -102,18 +102,33 @@ router.post('/', auth, requireOwnerOrAdmin, [
       });
     }
 
-    const { email, password, fullName, role, phone, department, expertise, companyName } = req.body;
+    let { username, email, password, fullName, role, phone, department, expertise, companyName } = req.body;
 
-    // Check if user already exists
-    const existingUser = await User.findOne({ email });
+    // Auto-generate username from fullName if not provided
+    if (!username && fullName) {
+      const firstName = fullName.trim().split(/\s+/)[0];
+      const baseUsername = firstName.toLowerCase().replace(/[^a-z0-9]/g, '');
+      
+      // Ensure uniqueness
+      username = baseUsername;
+      let counter = 1;
+      while (await User.findOne({ username })) {
+        username = `${baseUsername}${counter}`;
+        counter++;
+      }
+    }
+
+    // Check if user already exists by username
+    const existingUser = await User.findOne({ username: username.toLowerCase().trim() });
     if (existingUser) {
       return res.status(400).json({
         success: false,
-        message: 'User already exists with this email'
+        message: 'User already exists with this username'
       });
     }
 
     const userData = {
+      username: username.toLowerCase().trim(),
       email,
       password,
       fullName,
@@ -392,26 +407,41 @@ router.post('/bulk-import', auth, requireOwnerOrAdmin, async (req, res) => {
     for (const userData of usersData) {
       try {
         // Validate required fields
-        if (!userData.email || !userData.fullName) {
+        if (!userData.fullName) {
           results.failed.push({
             data: userData,
-            error: 'Email and full name are required'
+            error: 'Full name is required'
           });
           continue;
         }
 
-        // Check for duplicates by email
+        // Auto-generate username from fullName if not provided
+        let username = userData.username;
+        if (!username && userData.fullName) {
+          const firstName = userData.fullName.trim().split(/\s+/)[0];
+          const baseUsername = firstName.toLowerCase().replace(/[^a-z0-9]/g, '');
+          
+          // Ensure uniqueness
+          username = baseUsername;
+          let counter = 1;
+          while (await User.findOne({ username })) {
+            username = `${baseUsername}${counter}`;
+            counter++;
+          }
+        }
+
+        // Check for duplicates by username
         const existingUser = await User.findOne({
-          email: userData.email.toLowerCase().trim()
+          username: username.toLowerCase().trim()
         });
 
         if (existingUser) {
           results.duplicates.push({
             data: userData,
-            reason: 'User with this email already exists',
+            reason: 'User with this username already exists',
             existing: {
               id: existingUser._id,
-              email: existingUser.email,
+              username: existingUser.username,
               fullName: existingUser.fullName,
               role: existingUser.role
             }
@@ -420,13 +450,19 @@ router.post('/bulk-import', auth, requireOwnerOrAdmin, async (req, res) => {
         }
 
         // Prepare user data
+        // Normalize department to match schema enum values (lowercase). Default to 'general' if not provided or invalid.
+        const validDepartments = ['taxation', 'audit', 'advisory', 'compliance', 'general'];
+        const deptNormalized = userData.department != null ? String(userData.department).toLowerCase().trim() : 'general';
+
         const processedData = {
-          email: userData.email.toLowerCase().trim(),
+          username: username.toLowerCase().trim(),
+          email: userData.email ? userData.email.toLowerCase().trim() : undefined,
           fullName: userData.fullName.trim(),
           role: userData.role || 'employee', // Default to employee
           firmId: req.user.firmId._id,
-          phone: userData.phone?.trim() || undefined,
-          department: userData.department || 'general',
+          // Coerce phone to string before calling trim to avoid TypeError when phone is numeric
+          phone: userData.phone != null ? (String(userData.phone).trim() || undefined) : undefined,
+          department: validDepartments.includes(deptNormalized) ? deptNormalized : 'general',
           isActive: userData.isActive !== undefined ? userData.isActive : true,
           // Generate a default password (should be changed on first login)
           password: userData.password || 'ChangeMe@123'

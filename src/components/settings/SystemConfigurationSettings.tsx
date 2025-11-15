@@ -54,7 +54,15 @@ interface SystemConfig {
   whatsapp_test_mode: boolean;
 }
 
-export const SystemConfigurationSettings = () => {
+interface SystemConfigurationSettingsProps {
+  showWhatsApp?: boolean;
+  showTesting?: boolean;
+}
+
+export const SystemConfigurationSettings = ({ 
+  showWhatsApp = true, 
+  showTesting = true 
+}: SystemConfigurationSettingsProps) => {
   const { toast } = useToast();
   
   const [config, setConfig] = useState<SystemConfig>({
@@ -377,81 +385,83 @@ export const SystemConfigurationSettings = () => {
       </Card>
 
       {/* WhatsApp Configuration */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <MessageCircle className="h-5 w-5 text-green-600" />
-            WhatsApp Configuration
+      {showWhatsApp && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <MessageCircle className="h-5 w-5 text-green-600" />
+              WhatsApp Configuration
+              {config.whatsapp_enabled && (
+                <Badge variant="secondary" className="bg-green-100 text-green-800">Enabled</Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <Label>Enable WhatsApp Integration</Label>
+              <Switch
+                checked={config.whatsapp_enabled}
+                onCheckedChange={(checked) => handleConfigChange('whatsapp_enabled', checked)}
+              />
+            </div>
+            
             {config.whatsapp_enabled && (
-              <Badge variant="secondary" className="bg-green-100 text-green-800">Enabled</Badge>
+              <>
+                <Separator />
+                <div className="grid grid-cols-1 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="whatsapp_api">WhatsApp API URL</Label>
+                    <Input
+                      id="whatsapp_api"
+                      value={config.whatsapp_api_url}
+                      onChange={(e) => handleConfigChange('whatsapp_api_url', e.target.value)}
+                      placeholder="https://api.whatsapp.com/send"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="whatsapp_token">Access Token</Label>
+                    <Input
+                      id="whatsapp_token"
+                      type="password"
+                      value={config.whatsapp_access_token}
+                      onChange={(e) => handleConfigChange('whatsapp_access_token', e.target.value)}
+                      placeholder="Your WhatsApp Business API token"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="whatsapp_timeout">Request Timeout (seconds)</Label>
+                    <Input
+                      id="whatsapp_timeout"
+                      type="number"
+                      min="5"
+                      max="120"
+                      value={config.whatsapp_timeout}
+                      onChange={(e) => handleConfigChange('whatsapp_timeout', parseInt(e.target.value))}
+                    />
+                  </div>
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <Label>WhatsApp Test Mode</Label>
+                  <Switch
+                    checked={config.whatsapp_test_mode}
+                    onCheckedChange={(checked) => handleConfigChange('whatsapp_test_mode', checked)}
+                  />
+                </div>
+                
+                <Button 
+                  variant="outline" 
+                  onClick={() => handleTestConnection('whatsapp')}
+                  disabled={isTesting.whatsapp}
+                  className="w-full"
+                >
+                  {isTesting.whatsapp ? 'Testing...' : 'Test WhatsApp Connection'}
+                </Button>
+              </>
             )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <Label>Enable WhatsApp Integration</Label>
-            <Switch
-              checked={config.whatsapp_enabled}
-              onCheckedChange={(checked) => handleConfigChange('whatsapp_enabled', checked)}
-            />
-          </div>
-          
-          {config.whatsapp_enabled && (
-            <>
-              <Separator />
-              <div className="grid grid-cols-1 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="whatsapp_api">WhatsApp API URL</Label>
-                  <Input
-                    id="whatsapp_api"
-                    value={config.whatsapp_api_url}
-                    onChange={(e) => handleConfigChange('whatsapp_api_url', e.target.value)}
-                    placeholder="https://api.whatsapp.com/send"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="whatsapp_token">Access Token</Label>
-                  <Input
-                    id="whatsapp_token"
-                    type="password"
-                    value={config.whatsapp_access_token}
-                    onChange={(e) => handleConfigChange('whatsapp_access_token', e.target.value)}
-                    placeholder="Your WhatsApp Business API token"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="whatsapp_timeout">Request Timeout (seconds)</Label>
-                  <Input
-                    id="whatsapp_timeout"
-                    type="number"
-                    min="5"
-                    max="120"
-                    value={config.whatsapp_timeout}
-                    onChange={(e) => handleConfigChange('whatsapp_timeout', parseInt(e.target.value))}
-                  />
-                </div>
-              </div>
-              
-              <div className="flex items-center justify-between">
-                <Label>WhatsApp Test Mode</Label>
-                <Switch
-                  checked={config.whatsapp_test_mode}
-                  onCheckedChange={(checked) => handleConfigChange('whatsapp_test_mode', checked)}
-                />
-              </div>
-              
-              <Button 
-                variant="outline" 
-                onClick={() => handleTestConnection('whatsapp')}
-                disabled={isTesting.whatsapp}
-                className="w-full"
-              >
-                {isTesting.whatsapp ? 'Testing...' : 'Test WhatsApp Connection'}
-              </Button>
-            </>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Excel Configuration */}
       <Card>
@@ -496,38 +506,40 @@ export const SystemConfigurationSettings = () => {
       </Card>
 
       {/* Testing Configuration */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TestTube className="h-5 w-5 text-purple-600" />
-            Global Testing Configuration
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <Label>Master Test Mode</Label>
-              <p className="text-sm text-muted-foreground">Override all individual test mode settings</p>
-            </div>
-            <Switch
-              checked={config.test_mode_enabled}
-              onCheckedChange={(checked) => handleConfigChange('test_mode_enabled', checked)}
-            />
-          </div>
-          
-          {config.test_mode_enabled && (
-            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <div className="flex items-center gap-2">
-                <Zap className="h-4 w-4 text-yellow-600" />
-                <span className="font-medium text-yellow-800">Test Mode Active</span>
+      {showTesting && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TestTube className="h-5 w-5 text-purple-600" />
+              Global Testing Configuration
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label>Master Test Mode</Label>
+                <p className="text-sm text-muted-foreground">Override all individual test mode settings</p>
               </div>
-              <p className="text-sm text-yellow-700 mt-1">
-                All integrations are running in test mode. No real transactions or messages will be processed.
-              </p>
+              <Switch
+                checked={config.test_mode_enabled}
+                onCheckedChange={(checked) => handleConfigChange('test_mode_enabled', checked)}
+              />
             </div>
-          )}
-        </CardContent>
-      </Card>
+            
+            {config.test_mode_enabled && (
+              <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <Zap className="h-4 w-4 text-yellow-600" />
+                  <span className="font-medium text-yellow-800">Test Mode Active</span>
+                </div>
+                <p className="text-sm text-yellow-700 mt-1">
+                  All integrations are running in test mode. No real transactions or messages will be processed.
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };

@@ -532,11 +532,12 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({ client, onCl
                             Add Contact
                           </Button>
                         </DialogTrigger>
-                        <DialogContent className="max-w-2xl">
-                          <DialogHeader>
-                            <DialogTitle>Add New Contact</DialogTitle>
+                        <DialogContent className="max-w-2xl p-0">
+                          <DialogHeader className="flex-shrink-0 pb-6 px-6 pt-6">
+                            <DialogTitle className="text-xl font-semibold">Add New Contact</DialogTitle>
                           </DialogHeader>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="px-6 pb-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                               <Label>Contact Name *</Label>
                               <Input
@@ -612,6 +613,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({ client, onCl
                                 Cancel
                               </Button>
                             </div>
+                          </div>
                           </div>
                         </DialogContent>
                       </Dialog>

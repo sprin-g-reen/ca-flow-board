@@ -602,6 +602,7 @@ const OwnerEmployees = () => {
                             />
                           </TableHead>
                           <TableHead className="w-64 text-xs font-medium">Employee</TableHead>
+                          <TableHead className="w-24 text-xs font-medium">Username</TableHead>
                           <TableHead className="w-24 text-xs font-medium">Employee ID</TableHead>
                           <TableHead className="w-32 text-xs font-medium">Department</TableHead>
                           <TableHead className="w-28 text-xs font-medium">Salary</TableHead>
@@ -634,6 +635,11 @@ const OwnerEmployees = () => {
                                     {employee.email}
                                   </div>
                                 </div>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-xs">
+                              <div className="truncate pr-2 text-gray-600 font-mono" title={employee.username}>
+                                {employee.username || '-'}
                               </div>
                             </TableCell>
                             <TableCell className="text-xs">

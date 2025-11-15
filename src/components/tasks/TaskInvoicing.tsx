@@ -90,9 +90,16 @@ export const TaskInvoicing = ({ task, client }) => {
         notes: ''
       });
       
-    } catch (error) {
+    } catch (error: any) {
+      // Provide a clearer, user-friendly message for network/CORS errors
       console.error('Error generating quotation:', error);
-      toast.error(`Error: ${error.message}`);
+      const isNetworkError = error instanceof TypeError || /failed to fetch/i.test(String(error.message || ''));
+
+      if (isNetworkError) {
+        toast.error('Network error: Unable to contact the backend. Ensure the backend is running or configure the Vite dev proxy / CORS.');
+      } else {
+        toast.error(`Error: ${error.message || 'Failed to generate quotation'}`);
+      }
     } finally {
       setIsGenerating(false);
     }

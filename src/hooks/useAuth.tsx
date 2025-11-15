@@ -101,7 +101,8 @@ export function useAuth() {
 
   const signIn = async (email: string, password: string) => {
     try {
-      const response = await authAPI.login({ email, password }) as AuthResponse;
+      // Backend expects username field, not email
+      const response = await authAPI.login({ username: email, password }) as AuthResponse;
       
       if (response.success && response.data?.token) {
         if (setValidatedToken(response.data.token)) {

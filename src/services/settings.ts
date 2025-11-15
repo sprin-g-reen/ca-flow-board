@@ -200,6 +200,17 @@ class SettingsService {
     }
   }
 
+  // Persist settings file on the backend (development only)
+  async saveSettingsFile(): Promise<any> {
+    try {
+      const response = await api.post('/settings/save-file');
+      return response;
+    } catch (error) {
+      console.error('Failed to save settings file:', error);
+      throw error;
+    }
+  }
+
   // Get default settings
   getDefaultSettings(): AllSettings {
     return {

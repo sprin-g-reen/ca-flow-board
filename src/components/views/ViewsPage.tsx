@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Plus, X, HelpCircle, ChevronDown } from "lucide-react";
 import apiClient from "@/services/api";
+import Swal from 'sweetalert2';
 
 interface FieldDefinition {
   name: string;
@@ -151,7 +152,7 @@ export default function ViewsPage() {
 
   const createView = async () => {
     if (!viewName.trim()) {
-      alert('Please enter a view name');
+      await Swal.fire({ title: 'Missing information', text: 'Please enter a view name', icon: 'warning' });
       return;
     }
 
@@ -171,10 +172,10 @@ export default function ViewsPage() {
       setFilters([]);
       setSelectedFields([]);
       
-      alert('View created successfully!');
+  await Swal.fire({ title: 'View created', text: 'View created successfully!', icon: 'success' });
     } catch (error) {
       console.error('Error creating view:', error);
-      alert('Error creating view');
+  await Swal.fire({ title: 'Error', text: 'Error creating view', icon: 'error' });
     }
   };
 
@@ -190,8 +191,8 @@ export default function ViewsPage() {
       }) as { success: boolean; data: { rows: any[] } };
       setViewData(response?.data?.rows || []);
     } catch (error) {
-      console.error('Error executing view:', error);
-      alert('Error executing view');
+  console.error('Error executing view:', error);
+  await Swal.fire({ title: 'Error', text: 'Error executing view', icon: 'error' });
     } finally {
       setLoading(false);
     }

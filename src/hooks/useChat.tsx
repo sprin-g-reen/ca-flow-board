@@ -63,6 +63,8 @@ export interface ChatRoom {
 export const useChat = () => {
   const [activeRoom, setActiveRoom] = useState<string | null>(null);
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
+  const [isConnected, setIsConnected] = useState<boolean>(false);
+  const [reconnectSignal, setReconnectSignal] = useState<number>(0);
   const user = useSelector((state: RootState) => state.auth.user);
   const queryClient = useQueryClient();
 
@@ -201,20 +203,25 @@ export const useChat = () => {
   // WebSocket for real-time updates
   useEffect(() => {
     if (!user) return;
-
     let ws: WebSocket | null = null;
-    let reconnectInterval: NodeJS.Timeout | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let reconnectAttempts = 0;
+  const maxReconnectAttempts = 10;
+
+    const backoff = (attempt: number) => Math.min(30000, 1000 * Math.pow(2, attempt)) + Math.floor(Math.random() * 1000);
 
     const connect = () => {
-  const wsToken = getValidatedToken();
-  const wsUrl = wsToken ? `buildWsUrl('chat')?token=${wsToken}` : `buildWsUrl('chat')`;
-  ws = new WebSocket(wsUrl);
-      
+      const wsToken = getValidatedToken();
+      const wsUrl = wsToken ? buildWsUrl('chat', wsToken) : buildWsUrl('chat');
+      ws = new WebSocket(wsUrl);
+
       ws.onopen = () => {
         console.log('Connected to chat WebSocket');
-        if (reconnectInterval) {
-          clearInterval(reconnectInterval);
-          reconnectInterval = null;
+        reconnectAttempts = 0;
+        setIsConnected(true);
+        if (reconnectTimer) {
+          clearTimeout(reconnectTimer);
+          reconnectTimer = null;
         }
       };
       
@@ -242,31 +249,37 @@ export const useChat = () => {
         }
       };
       
-      ws.onclose = () => {
-        console.log('Disconnected from chat WebSocket');
-        if (!reconnectInterval) {
-          reconnectInterval = setInterval(() => {
-            console.log('Attempting to reconnect to chat WebSocket...');
-            connect();
-          }, 5000); // Reconnect every 5 seconds
+      ws.onclose = (ev) => {
+        console.log('Disconnected from chat WebSocket', ev);
+        setIsConnected(false);
+        if (reconnectAttempts < maxReconnectAttempts) {
+          const timeout = backoff(reconnectAttempts);
+          reconnectAttempts += 1;
+          console.log(`Reconnecting in ${timeout}ms (attempt ${reconnectAttempts})`);
+          reconnectTimer = setTimeout(() => connect(), timeout);
+        } else {
+          console.warn('Max reconnect attempts reached for chat WebSocket');
+          toast.error('Disconnected from chat. Reconnection attempts failed.');
         }
       };
       
       ws.onerror = (error) => {
         console.error('WebSocket error:', error);
-        ws?.close();
+        // Close socket to trigger reconnect logic
+        try { ws?.close(); } catch (e) { /* ignore */ }
       };
     };
 
-    connect();
-    
+  connect();
+
     return () => {
-      if (reconnectInterval) {
-        clearInterval(reconnectInterval);
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
       }
-      ws?.close();
+      try { ws?.close(); } catch (e) { /* ignore */ }
     };
-  }, [user, queryClient]);
+  }, [user, queryClient, reconnectSignal]);
+
 
   const sendMessage = (roomId: string, content: string) => {
     if (!roomId) return;
@@ -302,5 +315,7 @@ export const useChat = () => {
     isLoading: roomsLoading || messagesLoading,
     isSending: sendMessageMutation.isPending,
     isCreatingRoom: createRoomMutation.isPending,
+    isConnected,
+    reconnect: () => setReconnectSignal(s => s + 1),
   };
 };

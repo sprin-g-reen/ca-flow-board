@@ -79,28 +79,61 @@ async function gatherUserDataContext(user) {
   try {
     const firmId = user.firmId?._id || user.firmId;
     
-    // Fetch ALL data (no limits) for complete system awareness
-    const [clients, tasks, invoices, users] = await Promise.all([
-      Client.find({ firmId }).select('name email phone status industry gstin createdAt').sort({ createdAt: -1 }),
-      Task.find({ firm: firmId }).select('title status priority dueDate assignedTo clientName').sort({ createdAt: -1 }),
-      Invoice.find({ firm: firmId }).select('invoiceNumber amount status dueDate clientName').sort({ createdAt: -1 }),
+    // By default exclude soft-deleted or archived data
+    const clientQuery = { firmId, isDeleted: false };
+    const taskQuery = { firm: firmId, isArchived: { $ne: true } };
+    const invoiceQuery = { firm: firmId };
+
+    // CRITICAL SECURITY: If the requesting user is an employee, restrict context to only their data
+    if (user.role === 'employee') {
+      // Employees can only see tasks assigned to them or that they created
+      taskQuery.$or = [ 
+        { assignedTo: user._id }, 
+        { assignedBy: user._id },
+        { collaborators: user._id }
+      ];
+      
+      // Employees can only see invoices they created
+      invoiceQuery.createdBy = user._id;
+    }
+
+    // Fetch tasks first to get client IDs for employees
+    const tasks = await Task.find(taskQuery)
+      .select('title status priority dueDate assignedTo client clientName firm')
+      .populate('client', '_id')
+      .sort({ createdAt: -1 });
+
+    // CRITICAL SECURITY: For employees, restrict clients to only those with assigned tasks
+    if (user.role === 'employee') {
+      const clientIds = [...new Set(
+        tasks
+          .map(t => t.client?._id || t.client)
+          .filter(Boolean)
+      )];
+      clientQuery._id = { $in: clientIds };
+    }
+
+    // Fetch remaining data
+    const [clients, invoices, users] = await Promise.all([
+      Client.find(clientQuery).select('name email phone status industry gstin createdAt').sort({ createdAt: -1 }),
+      Invoice.find(invoiceQuery).select('invoiceNumber amount status dueDate clientName createdBy relatedTask').sort({ createdAt: -1 }),
       User.find({ firmId, role: { $in: ['owner', 'admin', 'employee'] } }).select('fullName email role department isOnline').sort({ role: 1 })
     ]);
 
     // Categorize clients
-    const activeClients = clients.filter(c => c.status === 'active');
-    const inactiveClients = clients.filter(c => c.status === 'inactive');
+  const activeClients = clients.filter(c => c.status === 'active');
+  const inactiveClients = clients.filter(c => c.status === 'inactive');
     
     // Categorize tasks
-    const pendingTasks = tasks.filter(t => t.status === 'pending' || t.status === 'inprogress');
-    const completedTasks = tasks.filter(t => t.status === 'completed');
-    const overdueTasks = tasks.filter(t => new Date(t.dueDate) < new Date() && t.status !== 'completed');
+  const pendingTasks = tasks.filter(t => t.status === 'pending' || t.status === 'inprogress');
+  const completedTasks = tasks.filter(t => t.status === 'completed');
+  const overdueTasks = tasks.filter(t => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== 'completed');
     
     // Categorize invoices
-    const paidInvoices = invoices.filter(i => i.status === 'paid');
-    const pendingInvoices = invoices.filter(i => i.status === 'sent' || i.status === 'draft');
-    const overdueInvoices = invoices.filter(i => i.status === 'overdue');
-    const totalRevenue = invoices.reduce((sum, i) => sum + (i.amount || 0), 0);
+  const paidInvoices = invoices.filter(i => i.status === 'paid');
+  const pendingInvoices = invoices.filter(i => i.status === 'sent' || i.status === 'draft');
+  const overdueInvoices = invoices.filter(i => i.status === 'overdue');
+  const totalRevenue = invoices.reduce((sum, i) => sum + (i.amount || 0), 0);
 
     // Build comprehensive context with ALL data
     const allClientsContext = clients.map((c, idx) => 
@@ -115,39 +148,51 @@ async function gatherUserDataContext(user) {
       `${idx + 1}. #${i.number} - ₹${i.amount?.toLocaleString()} - ${i.clientName || 'N/A'} [${i.status}]`
     ).join('\n');
 
+    // Create role-specific context message
+    const roleContext = user.role === 'employee' 
+      ? `You are assisting ${user.fullName}, an EMPLOYEE at ${user.firmId?.name || 'the firm'}. 
+
+⚠️ IMPORTANT: You can ONLY see and discuss:
+• Tasks assigned to this employee (${tasks.length} tasks)
+• Clients related to those tasks (${clients.length} clients)
+• Invoices created by this employee (${invoices.length} invoices)
+
+Do NOT provide information about other employees' tasks, clients, or firm-wide data that this employee doesn't have access to.`
+      : `You are an AI assistant for ${user.firmId?.name || 'Your Firm'}, a Chartered Accountant firm. You have COMPLETE AWARENESS of the entire system as an admin/owner.`;
+
     return `
-You are an AI assistant for ${user.firmId?.name || 'Your Firm'}, a Chartered Accountant firm. You have COMPLETE AWARENESS of the entire system.
+${roleContext}
 
 ═══════════════════════════════════════════════════════════════════════
-FIRM OVERVIEW
+${user.role === 'employee' ? 'YOUR ASSIGNED DATA' : 'FIRM OVERVIEW'}
 ═══════════════════════════════════════════════════════════════════════
-• Total Clients: ${clients.length} (${activeClients.length} active, ${inactiveClients.length} inactive)
-• Total Tasks: ${tasks.length} (${pendingTasks.length} pending, ${completedTasks.length} completed, ${overdueTasks.length} overdue)
-• Total Invoices: ${invoices.length} (${paidInvoices.length} paid, ${pendingInvoices.length} pending, ${overdueInvoices.length} overdue)
-• Total Revenue: ₹${totalRevenue.toLocaleString()}
-• Team Members: ${users.length}
+• ${user.role === 'employee' ? 'Your' : 'Total'} Clients: ${clients.length} (${activeClients.length} active, ${inactiveClients.length} inactive)
+• ${user.role === 'employee' ? 'Your' : 'Total'} Tasks: ${tasks.length} (${pendingTasks.length} pending, ${completedTasks.length} completed, ${overdueTasks.length} overdue)
+• ${user.role === 'employee' ? 'Your' : 'Total'} Invoices: ${invoices.length} (${paidInvoices.length} paid, ${pendingInvoices.length} pending, ${overdueInvoices.length} overdue)
+${user.role !== 'employee' ? `• Total Revenue: ₹${totalRevenue.toLocaleString()}\n• Team Members: ${users.length}` : ''}
 
 ═══════════════════════════════════════════════════════════════════════
-ALL CLIENTS (${clients.length} total)
+${user.role === 'employee' ? 'YOUR ASSIGNED CLIENTS' : 'ALL CLIENTS'} (${clients.length} total)
 ═══════════════════════════════════════════════════════════════════════
 ${allClientsContext || 'No clients yet'}
 
 ═══════════════════════════════════════════════════════════════════════
-RECENT TASKS (showing ${Math.min(tasks.length, 20)} of ${tasks.length})
+${user.role === 'employee' ? 'YOUR TASKS' : 'RECENT TASKS'} (showing ${Math.min(tasks.length, 20)} of ${tasks.length})
 ═══════════════════════════════════════════════════════════════════════
 ${allTasksContext || 'No tasks yet'}
 ${tasks.length > 20 ? `\n... and ${tasks.length - 20} more tasks` : ''}
 
 ═══════════════════════════════════════════════════════════════════════
-RECENT INVOICES (showing ${Math.min(invoices.length, 20)} of ${invoices.length})
+${user.role === 'employee' ? 'YOUR INVOICES' : 'RECENT INVOICES'} (showing ${Math.min(invoices.length, 20)} of ${invoices.length})
 ═══════════════════════════════════════════════════════════════════════
 ${allInvoicesContext || 'No invoices yet'}
 ${invoices.length > 20 ? `\n... and ${invoices.length - 20} more invoices` : ''}
 
-═══════════════════════════════════════════════════════════════════════
+${user.role !== 'employee' ? `═══════════════════════════════════════════════════════════════════════
 TEAM MEMBERS (${users.length} total)
 ═══════════════════════════════════════════════════════════════════════
 ${users.map((u, idx) => `${idx + 1}. ${u.fullName} (${u.role}${u.department ? ` - ${u.department}` : ''}) - ${u.email}${u.isOnline ? ' 🟢 Online' : ''}`).join('\n')}
+` : ''}
 
 ═══════════════════════════════════════════════════════════════════════
 INSTRUCTIONS
@@ -356,9 +401,9 @@ const functionHandlers = {
       const firmId = user.firmId?._id || user.firmId;
       let client;
 
-      // Try to find by ID first
+      // Try to find by ID first (exclude soft-deleted)
       if (clientNameOrId.match(/^[0-9a-fA-F]{24}$/)) {
-        client = await Client.findOne({ _id: clientNameOrId, firmId })
+        client = await Client.findOne({ _id: clientNameOrId, firmId, isDeleted: false })
           .populate('primaryContact')
           .lean();
       }
@@ -367,6 +412,7 @@ const functionHandlers = {
       if (!client) {
         client = await Client.findOne({ 
           firmId,
+          isDeleted: false,
           name: { $regex: clientNameOrId, $options: 'i' }
         })
         .populate('primaryContact')
@@ -380,10 +426,27 @@ const functionHandlers = {
         };
       }
 
+      // If the user is an employee, ensure they are allowed to access this client (only their clients)
+      if (user.role === 'employee') {
+        const relatedTask = await Task.findOne({ firm: firmId, client: client._id, $or: [{ assignedTo: user._id }, { assignedBy: user._id }] }).lean();
+        if (!relatedTask && String(client.createdBy) !== String(user._id)) {
+          return { error: 'Access denied: employees can only query clients related to them', success: false };
+        }
+      }
+
       // Get associated tasks and invoices
+      const taskQuery = { firm: firmId, client: client._id, isArchived: { $ne: true } };
+      const invoiceQuery = { firm: firmId, client: client._id };
+
+      // Employees limited to their tasks/invoices
+      if (user.role === 'employee') {
+        taskQuery.$or = [{ assignedTo: user._id }, { assignedBy: user._id }];
+        invoiceQuery.$or = [{ createdBy: user._id }];
+      }
+
       const [tasks, invoices] = await Promise.all([
-        Task.find({ firm: firmId, clientName: client.name }).limit(10).lean(),
-        Invoice.find({ firm: firmId, clientName: client.name }).limit(10).lean()
+        Task.find(taskQuery).limit(10).lean(),
+        Invoice.find(invoiceQuery).limit(10).lean()
       ]);
 
       return {
@@ -501,10 +564,21 @@ const functionHandlers = {
         dateFilter = { createdAt: { $gte: startDate } };
       }
 
-      // Get clients data
-      const clients = await Client.find({ firmId, ...dateFilter }).lean();
-      const allClients = await Client.find({ firmId }).lean();
+      // Get clients data (exclude soft-deleted)
+      const clients = await Client.find({ firmId, isDeleted: false, ...dateFilter }).lean();
+      const allClients = await Client.find({ firmId, isDeleted: false }).lean();
       const invoices = await Invoice.find({ firm: firmId }).lean();
+
+      // If employee, narrow scope to their related data
+      if (user.role === 'employee') {
+        const taskClientIds = await Task.find({ firm: firmId, $or: [{ assignedTo: user._id }, { assignedBy: user._id }] }).distinct('client');
+        // Filter clients and invoices
+        clients = clients.filter(c => taskClientIds.some(id => String(id) === String(c._id)) || String(c.createdBy) === String(user._id));
+        allClients = allClients.filter(c => taskClientIds.some(id => String(id) === String(c._id)) || String(c.createdBy) === String(user._id));
+        // Filter invoices to those created by the employee or related to their tasks
+        const taskIds = await Task.find({ firm: firmId, $or: [{ assignedTo: user._id }, { assignedBy: user._id }] }).distinct('_id');
+        invoices = invoices.filter(i => String(i.createdBy) === String(user._id) || (i.relatedTask && taskIds.some(tid => String(tid) === String(i.relatedTask))));
+      }
 
       // Group by industry
       const industryBreakdown = clients.reduce((acc, c) => {
@@ -564,7 +638,23 @@ const functionHandlers = {
         query.clientName = { $regex: clientName, $options: 'i' };
       }
 
-      const invoices = await Invoice.find(query).lean();
+      // Exclude invoices that relate to soft-deleted clients
+      // If clientName is provided, attempt to find matching client and ensure not deleted
+      if (clientName) {
+        const client = await Client.findOne({ firmId, name: { $regex: clientName, $options: 'i' }, isDeleted: false }).lean();
+        if (!client) {
+          return { success: true, summary: { totalInvoices: 0 }, recentInvoices: [] };
+        }
+        query.client = client._id;
+      }
+
+      let invoices = await Invoice.find(query).lean();
+
+      // If employee, restrict invoices to those created by them or related to their tasks
+      if (user.role === 'employee') {
+        const taskIds = await Task.find({ firm: firmId, $or: [{ assignedTo: user._id }, { assignedBy: user._id }] }).distinct('_id');
+        invoices = invoices.filter(i => String(i.createdBy) === String(user._id) || (i.relatedTask && taskIds.some(tid => String(tid) === String(i.relatedTask))));
+      }
 
       // Calculate stats
       const totalAmount = invoices.reduce((sum, i) => sum + (i.amount || 0), 0);
@@ -616,7 +706,7 @@ const functionHandlers = {
     try {
       const firmId = user.firmId?._id || user.firmId;
       
-      let searchQuery = { firmId };
+  let searchQuery = { firmId, isDeleted: false };
       
       // Text search across multiple fields
       if (query) {
@@ -636,10 +726,16 @@ const functionHandlers = {
         searchQuery.status = status;
       }
 
-      const clients = await Client.find(searchQuery)
+      let clients = await Client.find(searchQuery)
         .limit(50)
-        .select('name email phone status industry gstin businessType')
+        .select('name email phone status industry gstin businessType createdBy')
         .lean();
+
+      // If employee, narrow to only clients related to them
+      if (user.role === 'employee') {
+        const taskClientIds = await Task.find({ firm: firmId, $or: [{ assignedTo: user._id }, { assignedBy: user._id }] }).distinct('client');
+        clients = clients.filter(c => taskClientIds.some(id => String(id) === String(c._id)) || String(c.createdBy) === String(user._id));
+      }
 
       return {
         success: true,
@@ -671,13 +767,13 @@ const functionHandlers = {
     try {
       const firmId = user.firmId?._id || user.firmId;
       
-      let query = { firmId };
+      let query = { firmId, isDeleted: false };
       if (status !== 'all') {
         query.status = status;
       }
 
       // Get total count for pagination info
-      const totalCount = await Client.countDocuments(query);
+  const totalCount = await Client.countDocuments(query);
       
       // Get paginated clients
       const clients = await Client.find(query)
@@ -686,6 +782,13 @@ const functionHandlers = {
         .limit(limit)
         .select('name email phone status industry gstin businessType createdAt')
         .lean();
+      
+      // If user is employee, filter clients to only those related to their tasks or created by them
+      let filteredClients = clients;
+      if (user.role === 'employee') {
+        const taskClientIds = await Task.find({ firm: firmId, $or: [{ assignedTo: user._id }, { assignedBy: user._id }]}).distinct('client');
+        filteredClients = clients.filter(c => taskClientIds.some(id => String(id) === String(c._id)) || String(c.createdBy) === String(user._id));
+      }
 
       return {
         success: true,

@@ -632,14 +632,14 @@ export const InvoicePreviewModal = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-5xl max-h-[95vh] overflow-hidden p-0">
+      <DialogContent className="max-w-5xl max-h-[95vh] flex flex-col p-0">
         <DialogHeader className="sr-only">
           <DialogTitle>Invoice Preview</DialogTitle>
           <DialogDescription>Preview your invoice before sending</DialogDescription>
         </DialogHeader>
 
         {/* Action Bar */}
-        <div className="sticky top-0 z-10 bg-white border-b px-6 py-3 flex items-center justify-between">
+        <div className="flex-shrink-0 border-b bg-white px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <h3 className="font-semibold text-lg">Invoice Preview</h3>
             <Badge variant="outline" className="ml-2">
@@ -663,8 +663,8 @@ export const InvoicePreviewModal = ({
         </div>
 
         {/* Invoice Preview Container */}
-        <div className="overflow-y-auto max-h-[calc(95vh-80px)] bg-gray-100 p-6">
-          <div ref={printRef} className="shadow-lg">
+        <div className="flex-1 overflow-y-auto min-h-0 bg-gray-100 px-6 py-6">
+          <div ref={printRef} className="shadow-lg rounded-md overflow-hidden">
             {useSimpleTemplate ? (
               <SimpleInvoiceTemplate
                 invoiceData={invoiceData}

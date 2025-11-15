@@ -6,12 +6,17 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
 import { useAnalytics } from '@/hooks/useAnalytics';
 import { TrendingUp, Award, Target, Users } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Download } from 'lucide-react';
+import { useState } from 'react';
 
 export const EmployeePerformanceMetrics = () => {
-  const { employeePerformance } = useAnalytics();
+  const analytics = useAnalytics();
+  const employeePerformance = Array.isArray(analytics?.employeePerformance) ? analytics.employeePerformance : [];
+  const [exporting, setExporting] = useState(false);
 
-  const getEmployeeInitials = (name: string) => {
-    if (!name) return '??';
+  const getEmployeeInitials = (name?: string) => {
+    if (!name || typeof name !== 'string') return '??';
     return name.split(' ').map(n => n[0]).join('').toUpperCase();
   };
 
@@ -29,16 +34,63 @@ export const EmployeePerformanceMetrics = () => {
 
   // Data for charts
   const chartData = employeePerformance.map(emp => ({
-    name: emp.employeeName ? emp.employeeName.split(' ')[0] : 'Unknown',
-    tasks: emp.totalTasks,
-    completed: emp.completedTasks,
-    efficiency: emp.efficiency,
-    workload: emp.workload,
+    name: emp?.employeeName && typeof emp.employeeName === 'string' ? emp.employeeName.split(' ')[0] : 'Unknown',
+    tasks: Number(emp?.totalTasks ?? 0),
+    completed: Number(emp?.completedTasks ?? 0),
+    efficiency: Number(emp?.efficiency ?? 0),
+    workload: Number(emp?.workload ?? 0),
   }));
 
-  const topPerformers = employeePerformance
-    .sort((a, b) => b.efficiency - a.efficiency)
+  const topPerformers = [...employeePerformance]
+    .sort((a, b) => (Number(b?.efficiency ?? 0) - Number(a?.efficiency ?? 0)))
     .slice(0, 3);
+
+  const safeNum = (v: any) => Number(v ?? 0);
+
+  const exportAsJSON = () => {
+    try {
+      setExporting(true);
+      const blob = new Blob([JSON.stringify(employeePerformance, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `employee-performance-${new Date().toISOString()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const exportAsCSV = () => {
+    try {
+      setExporting(true);
+      const headers = ['employeeId', 'employeeName', 'totalTasks', 'completedTasks', 'onTimeTasks', 'efficiency', 'workload'];
+      const rows = employeePerformance.map(emp => [
+  String(emp?.employeeId ?? ''),
+        String(emp?.employeeName ?? ''),
+        String(safeNum(emp?.totalTasks)),
+        String(safeNum(emp?.completedTasks)),
+        String(safeNum(emp?.onTimeTasks)),
+        String(safeNum(emp?.efficiency)),
+        String(safeNum(emp?.workload)),
+      ]);
+      const csv = [headers.join(','), ...rows.map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))].join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `employee-performance-${new Date().toISOString()}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -47,7 +99,7 @@ export const EmployeePerformanceMetrics = () => {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
-              <Users className="h-5 w-5 text-blue-600" />
+                <Users className="h-5 w-5 text-blue-600" />
               <div>
                 <p className="text-sm font-medium">Total Employees</p>
                 <p className="text-2xl font-bold">{employeePerformance.length}</p>
@@ -63,7 +115,7 @@ export const EmployeePerformanceMetrics = () => {
               <div>
                 <p className="text-sm font-medium">Avg Efficiency</p>
                 <p className="text-2xl font-bold">
-                  {(employeePerformance.reduce((sum, emp) => sum + emp.efficiency, 0) / employeePerformance.length).toFixed(1)}%
+                  {employeePerformance.length === 0 ? '0.0%' : (employeePerformance.reduce((sum, emp) => sum + safeNum(emp?.efficiency), 0) / employeePerformance.length).toFixed(1) + '%'}
                 </p>
               </div>
             </div>
@@ -77,7 +129,7 @@ export const EmployeePerformanceMetrics = () => {
               <div>
                 <p className="text-sm font-medium">Total Tasks</p>
                 <p className="text-2xl font-bold">
-                  {employeePerformance.reduce((sum, emp) => sum + emp.totalTasks, 0)}
+                  {employeePerformance.reduce((sum, emp) => sum + safeNum(emp?.totalTasks), 0)}
                 </p>
               </div>
             </div>
@@ -91,7 +143,7 @@ export const EmployeePerformanceMetrics = () => {
               <div>
                 <p className="text-sm font-medium">High Performers</p>
                 <p className="text-2xl font-bold">
-                  {employeePerformance.filter(emp => emp.efficiency >= 90).length}
+                  {employeePerformance.filter(emp => safeNum(emp?.efficiency) >= 90).length}
                 </p>
               </div>
             </div>
@@ -102,8 +154,18 @@ export const EmployeePerformanceMetrics = () => {
       {/* Performance Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
-          <CardHeader>
-            <CardTitle>Task Completion by Employee</CardTitle>
+                <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Task Completion by Employee</CardTitle>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" onClick={() => exportAsCSV()}>
+                  <Download className="mr-2 h-4 w-4" /> CSV
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => exportAsJSON()}>
+                  <Download className="mr-2 h-4 w-4" /> JSON
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="h-64">
@@ -149,7 +211,7 @@ export const EmployeePerformanceMetrics = () => {
         <CardContent>
           <div className="space-y-4">
             {topPerformers.map((employee, index) => (
-              <div key={employee.employeeId} className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
+              <div key={`${employee.employeeId ?? employee.employeeName ?? index}`} className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
                 <div className="flex items-center gap-3">
                   <div className="flex items-center justify-center w-8 h-8 bg-ca-blue text-white rounded-full text-sm font-bold">
                     {index + 1}
@@ -160,18 +222,18 @@ export const EmployeePerformanceMetrics = () => {
                     </AvatarFallback>
                   </Avatar>
                   <div>
-                    <h4 className="font-medium">{employee.employeeName}</h4>
+                    <h4 className="font-medium">{employee.employeeName ?? 'Unknown'}</h4>
                     <p className="text-sm text-gray-600">
-                      {employee.completedTasks}/{employee.totalTasks} tasks completed
+                      {safeNum(employee.completedTasks)}/{safeNum(employee.totalTasks)} tasks completed
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 ml-auto">
-                  <Badge className={`text-xs ${getPerformanceColor(employee.efficiency)}`}>
-                    {employee.efficiency.toFixed(1)}% efficiency
+                  <Badge className={`text-xs ${getPerformanceColor(safeNum(employee.efficiency))}`}>
+                    {safeNum(employee.efficiency).toFixed(1)}% efficiency
                   </Badge>
-                  <Badge className={`text-xs ${getWorkloadColor(employee.workload)}`}>
-                    {employee.workload} active
+                  <Badge className={`text-xs ${getWorkloadColor(safeNum(employee.workload))}`}>
+                    {safeNum(employee.workload)} active
                   </Badge>
                 </div>
               </div>
@@ -187,8 +249,8 @@ export const EmployeePerformanceMetrics = () => {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {employeePerformance.map(employee => (
-              <div key={employee.employeeId} className="p-4 border rounded-lg">
+            {employeePerformance.map((employee, idx) => (
+              <div key={`${employee.employeeId ?? employee.employeeName ?? idx}`} className="p-4 border rounded-lg">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3">
                     <Avatar>
@@ -197,40 +259,40 @@ export const EmployeePerformanceMetrics = () => {
                       </AvatarFallback>
                     </Avatar>
                     <div>
-                      <h4 className="font-medium">{employee.employeeName}</h4>
+                      <h4 className="font-medium">{employee.employeeName ?? 'Unknown'}</h4>
                       <p className="text-sm text-gray-600">Employee Performance</p>
                     </div>
                   </div>
-                  <Badge className={`${getPerformanceColor(employee.efficiency)}`}>
-                    {employee.efficiency.toFixed(1)}% Efficiency
+                  <Badge className={`${getPerformanceColor(safeNum(employee.efficiency))}`}>
+                    {safeNum(employee.efficiency).toFixed(1)}% Efficiency
                   </Badge>
                 </div>
 
                 <div className="grid grid-cols-4 gap-4 mb-3">
                   <div className="text-center">
                     <p className="text-sm text-gray-600">Total Tasks</p>
-                    <p className="text-lg font-bold">{employee.totalTasks}</p>
+                    <p className="text-lg font-bold">{safeNum(employee.totalTasks)}</p>
                   </div>
                   <div className="text-center">
                     <p className="text-sm text-gray-600">Completed</p>
-                    <p className="text-lg font-bold text-green-600">{employee.completedTasks}</p>
+                    <p className="text-lg font-bold text-green-600">{safeNum(employee.completedTasks)}</p>
                   </div>
                   <div className="text-center">
                     <p className="text-sm text-gray-600">On Time</p>
-                    <p className="text-lg font-bold text-blue-600">{employee.onTimeTasks}</p>
+                    <p className="text-lg font-bold text-blue-600">{safeNum(employee.onTimeTasks)}</p>
                   </div>
                   <div className="text-center">
                     <p className="text-sm text-gray-600">Workload</p>
-                    <p className="text-lg font-bold text-orange-600">{employee.workload}</p>
+                    <p className="text-lg font-bold text-orange-600">{safeNum(employee.workload)}</p>
                   </div>
                 </div>
 
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
                     <span>Efficiency Rate</span>
-                    <span>{employee.efficiency.toFixed(1)}%</span>
+                    <span>{safeNum(employee.efficiency).toFixed(1)}%</span>
                   </div>
-                  <Progress value={employee.efficiency} className="h-2" />
+                  <Progress value={safeNum(employee.efficiency)} className="h-2" />
                 </div>
               </div>
             ))}

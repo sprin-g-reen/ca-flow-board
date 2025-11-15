@@ -1,5 +1,6 @@
 import { useSelector } from 'react-redux';
 import { NavLink } from 'react-router-dom';
+import { useState } from 'react';
 import { 
   Calendar, 
   ClipboardCheck, 
@@ -10,7 +11,10 @@ import {
   PieChart, 
   Settings, 
   Trash2,
-  Users
+  Users,
+  ChevronDown,
+  ChevronRight,
+  FileBarChart
 } from 'lucide-react';
 import { RootState } from '@/store';
 import { cn } from '@/lib/utils';
@@ -24,6 +28,85 @@ interface SidebarLinkProps {
   label: string;
   end?: boolean;
 }
+
+interface SidebarMenuItemProps {
+  icon: React.ReactNode;
+  label: string;
+  subItems: Array<{ to: string; label: string }>;
+}
+
+const SidebarMenuItem = ({ icon, label, subItems }: SidebarMenuItemProps) => {
+  const { sidebarCollapsed } = useSelector((state: RootState) => state.ui);
+  const [isOpen, setIsOpen] = useState(false);
+  
+  if (sidebarCollapsed) {
+    // In collapsed mode, show icon with tooltip
+    return (
+      <div className="relative group">
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-accent-foreground cursor-pointer transition-colors">
+          {icon}
+        </div>
+        {/* Tooltip on hover */}
+        <div className="absolute left-full ml-2 top-0 hidden group-hover:block z-50 min-w-max">
+          <div className="bg-popover text-popover-foreground rounded-md shadow-md border p-2">
+            <div className="font-medium mb-1">{label}</div>
+            {subItems.map((item, idx) => (
+              <NavLink
+                key={idx}
+                to={item.to}
+                className="block text-xs py-1 hover:text-blue-600 transition-colors"
+              >
+                {item.label}
+              </NavLink>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
+  return (
+    <div>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className={cn(
+          "w-full flex items-center gap-3 rounded-xl px-3 py-3 transition-all duration-200 hover:bg-accent/80 hover:shadow-sm group relative",
+          "text-muted-foreground hover:text-foreground"
+        )}
+      >
+        <div className="flex items-center justify-center w-5 h-5 transition-transform group-hover:scale-110">
+          {icon}
+        </div>
+        <span className="text-sm font-medium transition-all flex-1 text-left">{label}</span>
+        {isOpen ? (
+          <ChevronDown className="h-4 w-4 transition-transform" />
+        ) : (
+          <ChevronRight className="h-4 w-4 transition-transform" />
+        )}
+      </button>
+      {isOpen && (
+        <div className="ml-8 mt-1 space-y-1">
+          {subItems.map((item, idx) => (
+            <NavLink
+              key={idx}
+              to={item.to}
+              className={({ isActive }) =>
+                cn(
+                  "block px-3 py-2 text-sm rounded-lg transition-colors",
+                  isActive
+                    ? "bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-md"
+                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                )
+              }
+            >
+              {item.label}
+            </NavLink>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const SidebarLink = ({ to, icon, label, end = false }: SidebarLinkProps) => {
   const { sidebarCollapsed } = useSelector((state: RootState) => state.ui);
@@ -70,6 +153,16 @@ const ownerLinks = [
   { to: '/owner/recycle-bin', icon: <Trash2 className="h-5 w-5" />, label: 'Recycle Bin' },
   { to: '/owner/settings', icon: <Settings className="h-5 w-5" />, label: 'Settings' },
 ];
+
+const ownerGSTReportsMenu = {
+  icon: <FileBarChart className="h-5 w-5" />,
+  label: 'GST Reports',
+  subItems: [
+    { to: '/owner/reports/gst/monthly', label: 'Monthly Report' },
+    { to: '/owner/reports/gst/quarterly', label: 'Quarterly Report' },
+    { to: '/owner/reports/gst/annual', label: 'Annual Report' },
+  ],
+};
 
 const adminLinks = [
   { to: '/admin/dashboard', icon: <LayoutDashboard className="h-5 w-5" />, label: 'Dashboard', end: true },
@@ -150,6 +243,14 @@ const AppSidebar = ({ onChatToggle }: AppSidebarProps = {}) => {
                   {link.icon}
                 </NavLink>
               ))}
+              {/* GST Reports in collapsed mode */}
+              {role === 'owner' && (
+                <SidebarMenuItem
+                  icon={ownerGSTReportsMenu.icon}
+                  label={ownerGSTReportsMenu.label}
+                  subItems={ownerGSTReportsMenu.subItems}
+                />
+              )}
             </div>
           ) : (
             <nav className="space-y-2">
@@ -162,13 +263,21 @@ const AppSidebar = ({ onChatToggle }: AppSidebarProps = {}) => {
                   end={link.end} 
                 />
               ))}
+              {/* GST Reports menu (after Views) */}
+              {role === 'owner' && (
+                <SidebarMenuItem
+                  icon={ownerGSTReportsMenu.icon}
+                  label={ownerGSTReportsMenu.label}
+                  subItems={ownerGSTReportsMenu.subItems}
+                />
+              )}
             </nav>
           )}
         </div>
       </ScrollArea>
       
-      {/* Chat Toggle Button */}
-      {onChatToggle && (
+      {/* Chat Toggle Button - Only for Owner/Admin, not for Employees (they use Messages link) */}
+      {onChatToggle && role !== 'employee' && role !== 'client' && (
         <div className="p-4 border-t">
           <Button
             variant="outline"

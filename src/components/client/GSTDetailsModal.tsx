@@ -188,15 +188,17 @@ export const GSTDetailsModal = ({ open, onOpenChange, gstin, onDataLoad }: GSTDe
   if (loading) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Loading GST Information...</DialogTitle>
-            <DialogDescription>Please wait while we fetch the company details.</DialogDescription>
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0">
+          <DialogHeader className="flex-shrink-0 pb-6 px-6 pt-6">
+            <DialogTitle className="text-xl font-semibold">Loading GST Information...</DialogTitle>
+            <DialogDescription className="text-sm text-gray-600 mt-2">Please wait while we fetch the company details.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <Skeleton className="h-32 w-full" />
-            <Skeleton className="h-48 w-full" />
-            <Skeleton className="h-48 w-full" />
+          <div className="flex-1 overflow-y-auto min-h-0 px-6 pb-6">
+            <div className="space-y-4">
+              <Skeleton className="h-32 w-full" />
+              <Skeleton className="h-48 w-full" />
+              <Skeleton className="h-48 w-full" />
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -206,24 +208,26 @@ export const GSTDetailsModal = ({ open, onOpenChange, gstin, onDataLoad }: GSTDe
   if (!gstData) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+        <DialogContent className="max-w-2xl p-0">
+          <DialogHeader className="flex-shrink-0 pb-6 px-6 pt-6">
+            <DialogTitle className="flex items-center gap-2 text-xl font-semibold">
               <AlertTriangle className="h-5 w-5 text-orange-500" />
               GST Data Not Available
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-sm text-gray-600 mt-2">
               Unable to fetch GST information for {gstin}. Please check the GSTIN and try again.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex justify-end space-x-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Close
-            </Button>
-            <Button onClick={fetchGSTData} disabled={loading}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Retry
-            </Button>
+          <div className="px-6 pb-6">
+            <div className="flex justify-end space-x-2">
+              <Button variant="outline" onClick={() => onOpenChange(false)}>
+                Close
+              </Button>
+              <Button onClick={fetchGSTData} disabled={loading}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Retry
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -239,9 +243,9 @@ export const GSTDetailsModal = ({ open, onOpenChange, gstin, onDataLoad }: GSTDe
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-3 text-xl">
+      <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col p-0">
+        <DialogHeader className="flex-shrink-0 pb-6 px-6 pt-6">
+          <DialogTitle className="flex items-center gap-3 text-xl font-semibold">
             <div className="flex items-center justify-center w-10 h-10 bg-blue-100 rounded-lg">
               <Building2 className="h-6 w-6 text-blue-600" />
             </div>
@@ -254,12 +258,13 @@ export const GSTDetailsModal = ({ open, onOpenChange, gstin, onDataLoad }: GSTDe
               </div>
             </div>
           </DialogTitle>
-          <DialogDescription className="text-base text-gray-600 mt-2">
+          <DialogDescription className="text-sm text-gray-600 mt-2">
             Complete GST information and filing status
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <div className="flex-1 overflow-y-auto min-h-0 px-6 pb-6">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-3 h-12 bg-gray-100/50 rounded-lg p-1">
             <TabsTrigger 
               value="details" 
@@ -783,8 +788,9 @@ export const GSTDetailsModal = ({ open, onOpenChange, gstin, onDataLoad }: GSTDe
             </div>
           </TabsContent>
         </Tabs>
+        </div>
 
-        <div className="flex justify-end items-center pt-4 mt-4 border-t space-x-3">
+        <div className="flex-shrink-0 flex justify-end items-center pt-4 pb-6 px-6 border-t space-x-3">
           <Button 
             variant="outline" 
             onClick={() => onOpenChange(false)}

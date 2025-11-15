@@ -8,27 +8,9 @@ import { DollarSign, TrendingUp, CreditCard, Clock } from 'lucide-react';
 export const RevenueTracker = () => {
   const { revenueMetrics, realTimeData } = useAnalytics();
 
-  const monthlyData = [
-    { month: 'Jan', revenue: 45000, expenses: 28000 },
-    { month: 'Feb', revenue: 52000, expenses: 30000 },
-    { month: 'Mar', revenue: 48000, expenses: 29000 },
-    { month: 'Apr', revenue: 61000, expenses: 32000 },
-    { month: 'May', revenue: 55000, expenses: 31000 },
-    { month: 'Jun', revenue: 67000, expenses: 35000 },
-  ];
-
   const paymentStatusData = [
     { name: 'Paid', value: revenueMetrics.paidInvoices, color: '#10b981' },
     { name: 'Pending', value: revenueMetrics.pendingPayments, color: '#f59e0b' },
-    { name: 'Overdue', value: 3, color: '#ef4444' },
-  ];
-
-  const revenueByService = [
-    { service: 'GST Filing', revenue: 125000, percentage: 35 },
-    { service: 'ITR Filing', revenue: 89000, percentage: 25 },
-    { service: 'ROC Filing', revenue: 67000, percentage: 18 },
-    { service: 'Audit Services', revenue: 45000, percentage: 12 },
-    { service: 'Others', revenue: 36000, percentage: 10 },
   ];
 
   const formatCurrency = (amount: number) => {
@@ -94,78 +76,32 @@ export const RevenueTracker = () => {
       </div>
 
       {/* Revenue Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Monthly Revenue Trend</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={monthlyData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip formatter={(value) => [formatCurrency(Number(value)), ""]} />
-                  <Legend />
-                  <Line type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={2} name="Revenue" />
-                  <Line type="monotone" dataKey="expenses" stroke="#ef4444" strokeWidth={2} name="Expenses" />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Payment Status Distribution</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={paymentStatusData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
-                    {paymentStatusData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Revenue by Service */}
       <Card>
         <CardHeader>
-          <CardTitle>Revenue by Service Category</CardTitle>
+          <CardTitle>Payment Status Distribution</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {revenueByService.map((service, index) => (
-              <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div>
-                  <h4 className="font-medium">{service.service}</h4>
-                  <p className="text-sm text-gray-600">{service.percentage}% of total revenue</p>
-                </div>
-                <div className="text-right">
-                  <p className="font-bold text-lg">{formatCurrency(service.revenue)}</p>
-                  <Badge variant="outline">{service.percentage}%</Badge>
-                </div>
-              </div>
-            ))}
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={paymentStatusData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                  outerRadius={80}
+                  fill="#8884d8"
+                  dataKey="value"
+                >
+                  {paymentStatusData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
           </div>
         </CardContent>
       </Card>
@@ -177,28 +113,32 @@ export const RevenueTracker = () => {
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {realTimeData?.recentPayments?.slice(0, 8).map((payment: any) => (
-              <div key={payment.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div>
-                  <h4 className="font-medium">Payment #{payment.payment_id}</h4>
-                  <p className="text-sm text-gray-600">{new Date(payment.created_at).toLocaleDateString()}</p>
+            {realTimeData?.recentPayments?.length > 0 ? (
+              realTimeData.recentPayments.slice(0, 8).map((payment: any) => (
+                <div key={payment.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div>
+                    <h4 className="font-medium">Payment #{payment.payment_id}</h4>
+                    <p className="text-sm text-gray-600">{new Date(payment.created_at).toLocaleDateString()}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold">{formatCurrency(payment.amount)}</p>
+                    <Badge 
+                      className={
+                        payment.status === 'paid' 
+                          ? 'bg-green-100 text-green-800' 
+                          : payment.status === 'pending'
+                          ? 'bg-yellow-100 text-yellow-800'
+                          : 'bg-red-100 text-red-800'
+                      }
+                    >
+                      {payment.status}
+                    </Badge>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="font-bold">{formatCurrency(payment.amount)}</p>
-                  <Badge 
-                    className={
-                      payment.status === 'paid' 
-                        ? 'bg-green-100 text-green-800' 
-                        : payment.status === 'pending'
-                        ? 'bg-yellow-100 text-yellow-800'
-                        : 'bg-red-100 text-red-800'
-                    }
-                  >
-                    {payment.status}
-                  </Badge>
-                </div>
-              </div>
-            ))}
+              ))
+            ) : (
+              <p className="text-center text-gray-500 py-4">No recent payments</p>
+            )}
           </div>
         </CardContent>
       </Card>

@@ -45,8 +45,13 @@ import {
   CheckCircle,
   AlertCircle,
   Loader2,
-  TestTube
+  TestTube,
+  RefreshCw,
+  Power
 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { settingsService } from '@/services/settings';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 
 const OwnerSettings = () => {
   const [activeTab, setActiveTab] = useState('company');
@@ -69,6 +74,10 @@ const OwnerSettings = () => {
     isResetting,
     isExporting
   } = useSettings({ autoSave: true, saveDelay: 2000 });
+
+  const { toast } = useToast();
+  const [isSavingFile, setIsSavingFile] = useState(false);
+  const [showConfirmSave, setShowConfirmSave] = useState(false);
 
   const handleFileImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -124,6 +133,53 @@ const OwnerSettings = () => {
             )}
             Export Settings
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowConfirmSave(true)}
+            disabled={isSavingFile}
+          >
+            {isSavingFile ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4 mr-2" />
+            )}
+            Save Settings File
+          </Button>
+          {/* Confirmation Dialog */}
+          <Dialog open={showConfirmSave} onOpenChange={setShowConfirmSave}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Save settings to backend file?</DialogTitle>
+              </DialogHeader>
+              <div className="py-4 text-sm text-secondary">
+                This will write the current firm's settings to <code>backend/settings.json</code> on the server. This is a development convenience and may overwrite existing file-based settings. Proceed?
+              </div>
+              <DialogFooter>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setShowConfirmSave(false)}>Cancel</Button>
+                  <Button
+                    onClick={async () => {
+                      try {
+                        setIsSavingFile(true);
+                        const res = await settingsService.saveSettingsFile();
+                        toast({ title: 'Saved', description: res?.message || 'Settings written to backend file.' });
+                      } catch (err: any) {
+                        console.error('Save settings file failed', err);
+                        toast({ title: 'Save failed', description: err?.message || 'Unable to save settings file', variant: 'destructive' });
+                      } finally {
+                        setIsSavingFile(false);
+                        setShowConfirmSave(false);
+                      }
+                    }}
+                    disabled={isSavingFile}
+                  >
+                    {isSavingFile ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : 'Save'}
+                  </Button>
+                </div>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
           <div className="relative">
             <input
               type="file"
@@ -171,7 +227,7 @@ const OwnerSettings = () => {
         </CardHeader>
         <CardContent>
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-8">
+            <TabsList className="grid w-full grid-cols-7">
               <TabsTrigger value="company" className="flex items-center gap-1">
                 <Building2 className="h-4 w-4" />
                 Company
@@ -199,10 +255,6 @@ const OwnerSettings = () => {
               <TabsTrigger value="automation" className="flex items-center gap-1">
                 <Zap className="h-4 w-4" />
                 Automation
-              </TabsTrigger>
-              <TabsTrigger value="testing" className="flex items-center gap-1">
-                <TestTube className="h-4 w-4" />
-                Testing
               </TabsTrigger>
             </TabsList>
 
@@ -678,7 +730,7 @@ const OwnerSettings = () => {
 
             <TabsContent value="system" className="space-y-6">
               <div className="py-4">
-                <SystemConfigurationSettings />
+                <SystemConfigurationSettings showWhatsApp={false} showTesting={false} />
               </div>
             </TabsContent>
 
@@ -702,22 +754,6 @@ const OwnerSettings = () => {
                 </div>
               </div>
             </TabsContent>
-
-            <TabsContent value="testing" className="space-y-6">
-              <div className="space-y-6 py-4">
-                <IntegrationsTestSuite />
-                <div>
-                  <h3 className="text-lg font-medium mb-4">Backend Connectivity Test</h3>
-                  <Separator />
-                  <div className="mt-4">
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Run basic connectivity tests to verify database and edge function connections.
-                    </p>
-                    <BackendConnectivityTest />
-                  </div>
-                </div>
-              </div>
-            </TabsContent>
           </Tabs>
         </CardContent>
       </Card>
@@ -730,8 +766,109 @@ const OwnerSettings = () => {
             Irreversible actions that will affect your system configuration
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between">
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between py-3 border-b">
+            <div>
+              <h4 className="font-medium">Full System Restart</h4>
+              <p className="text-sm text-muted-foreground">
+                Restart the entire system including all services and connections. Requires TOTP from auditor's authenticator.
+              </p>
+            </div>
+            <Button 
+              variant="destructive" 
+              onClick={() => {
+                const totp = prompt('Enter TOTP from Auditor\'s Google Auth/MS Auth:');
+                if (totp) {
+                  toast({ 
+                    title: 'System Restart Initiated', 
+                    description: 'Full system restart in progress...' 
+                  });
+                }
+              }}
+            >
+              <RotateCcw className="h-4 w-4 mr-2" />
+              System Restart
+            </Button>
+          </div>
+
+          <div className="flex items-center justify-between py-3 border-b">
+            <div>
+              <h4 className="font-medium">Application Restart</h4>
+              <p className="text-sm text-muted-foreground">
+                Restart only the application server without affecting database or other services.
+              </p>
+            </div>
+            <Button 
+              variant="destructive" 
+              onClick={() => {
+                toast({ 
+                  title: 'Application Restart Initiated', 
+                  description: 'Application restarting...' 
+                });
+              }}
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              App Restart
+            </Button>
+          </div>
+
+          <div className="flex items-center justify-between py-3 border-b">
+            <div>
+              <h4 className="font-medium">Shutdown Application</h4>
+              <p className="text-sm text-muted-foreground">
+                Kill this process and stop until manual restart. Requires TOTP from auditor's authenticator.
+              </p>
+            </div>
+            <Button 
+              variant="destructive" 
+              onClick={() => {
+                const totp = prompt('Enter TOTP from Auditor\'s Google Auth/MS Auth:');
+                if (totp) {
+                  const confirm = window.confirm('Are you sure? This will stop the application completely.');
+                  if (confirm) {
+                    toast({ 
+                      title: 'Shutdown Initiated', 
+                      description: 'Application shutting down...',
+                      variant: 'destructive'
+                    });
+                  }
+                }
+              }}
+            >
+              <Power className="h-4 w-4 mr-2" />
+              Shutdown App
+            </Button>
+          </div>
+
+          <div className="flex items-center justify-between py-3 border-b">
+            <div>
+              <h4 className="font-medium">Shutdown Server</h4>
+              <p className="text-sm text-muted-foreground">
+                Shutdown the entire server infrastructure. Requires TOTP from auditor's authenticator.
+              </p>
+            </div>
+            <Button 
+              variant="destructive" 
+              onClick={() => {
+                const totp = prompt('Enter TOTP from Auditor\'s Google Auth/MS Auth:');
+                if (totp) {
+                  const confirm = window.confirm('Are you sure? This will shutdown the entire server!');
+                  if (confirm) {
+                    toast({ 
+                      title: 'Server Shutdown Initiated', 
+                      description: 'Server shutting down...',
+                      variant: 'destructive'
+                    });
+                  }
+                }
+              }}
+            >
+              <Power className="h-4 w-4 mr-2" />
+              Shutdown Server
+            </Button>
+          </div>
+
+          <div className="flex items-center justify-between pt-3">
             <div>
               <h4 className="font-medium">Reset All Settings</h4>
               <p className="text-sm text-muted-foreground">

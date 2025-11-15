@@ -55,7 +55,7 @@ export const ExcelManager = ({
         ];
       case 'employees':
         return [
-          'ID', 'Employee ID', 'Name', 'Email', 'Department', 'Position',
+          'ID', 'Employee ID', 'Username', 'Name', 'Email', 'Phone', 'Department', 'Position',
           'Salary', 'Hire Date', 'Status'
         ];
       case 'invoices':
@@ -144,8 +144,8 @@ export const ExcelManager = ({
           }
           break;
         case 'employees':
-          if (!row.name || !row.email || !row.employee_id) {
-            errors.push(`Row ${rowNumber}: Name, Email, and Employee ID are required`);
+          if (!row.name) {
+            errors.push(`Row ${rowNumber}: Name is required`);
           } else {
             valid.push(row);
           }
@@ -264,7 +264,7 @@ export const ExcelManager = ({
         sampleData.push(['', 'ABC Company', 'contact@abc.com', '+91 0000000000', '123 Business Street', 'Contact Person', '22ABCDE1234F1Z5', 'ABCDE1234F', 'Private Limited', 'Technology', 'active']);
         break;
       case 'employees':
-        sampleData.push(['', 'EMP001', 'Employee Name', 'employee@company.com', 'Accounts', 'Senior Accountant', '50000', '2025-01-15', 'active']);
+        sampleData.push(['', 'EMP001', 'john', 'John Doe', 'john@company.com', '+91 9876543210', 'taxation', 'Senior Accountant', '50000', '2025-01-15', 'active']);
         break;
       case 'invoices':
         sampleData.push(['', 'INV-2025-001', 'ABC Company', '10000', '1800', '11800', 'paid', '2025-01-15', '2025-02-15', '2025-02-10']);

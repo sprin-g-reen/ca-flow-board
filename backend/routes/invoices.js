@@ -44,7 +44,11 @@ router.get('/', auth, async (req, res) => {
 
     // Execute query with pagination
     const invoices = await Invoice.find(query)
-      .populate('client', 'name email phone')
+      .populate({
+        path: 'client',
+        select: 'fullName name email phone',
+        // Use fullName as the primary name field, fallback to name
+      })
       .populate('createdBy', 'fullName email')
       .sort(sortObj)
       .skip(skip)
@@ -82,7 +86,10 @@ router.get('/:id', auth, async (req, res) => {
       _id: req.params.id,
       firm: req.user.firmId._id
     })
-      .populate('client', 'name email phone address')
+      .populate({
+        path: 'client',
+        select: 'fullName name email phone address'
+      })
       .populate('createdBy', 'fullName email')
       .populate('items.task', 'title taskId');
 
@@ -114,19 +121,64 @@ router.post('/', auth, async (req, res) => {
   try {
     const { collectionMethod, type, ...invoiceBody } = req.body;
     
+    // Calculate subtotal if not provided
+    let subtotal = invoiceBody.subtotal || 0;
+    if (!subtotal && invoiceBody.items && Array.isArray(invoiceBody.items)) {
+      subtotal = invoiceBody.items.reduce((sum, item) => sum + (item.amount || 0), 0);
+    }
+
+    // Calculate discount amount
+    let discountAmount = 0;
+    if (invoiceBody.discount) {
+      if (invoiceBody.discount.type === 'percentage') {
+        discountAmount = (subtotal * (invoiceBody.discount.value || 0)) / 100;
+      } else {
+        discountAmount = invoiceBody.discount.value || 0;
+      }
+    }
+
+    const discountedAmount = subtotal - discountAmount;
+
+    // Calculate tax
+    let taxAmount = invoiceBody.taxAmount || 0;
+    if (!taxAmount && invoiceBody.items && Array.isArray(invoiceBody.items)) {
+      taxAmount = invoiceBody.items.reduce((sum, item) => {
+        if (item.taxable) {
+          return sum + ((item.amount || 0) * (item.taxRate || 18)) / 100;
+        }
+        return sum;
+      }, 0);
+    }
+
+    // Calculate total
+    const totalAmount = invoiceBody.totalAmount || (discountedAmount + taxAmount);
+
     const invoiceData = {
       ...invoiceBody,
       type: type || 'invoice',
       collectionMethod: collectionMethod || 'account_1',
       firm: req.user.firmId._id,
-      createdBy: req.user._id
+      createdBy: req.user._id,
+      subtotal,
+      taxAmount,
+      totalAmount,
+      paidAmount: invoiceBody.paidAmount || 0,
+      balanceAmount: totalAmount - (invoiceBody.paidAmount || 0),
+      discount: {
+        type: invoiceBody.discount?.type || 'percentage',
+        value: invoiceBody.discount?.value || 0,
+        amount: discountAmount
+      }
     };
 
     const invoice = await Invoice.create(invoiceData);
 
     // Populate the created invoice
     const populatedInvoice = await Invoice.findById(invoice._id)
-      .populate('client', 'name email phone')
+      .populate({
+        path: 'client',
+        select: 'fullName name email phone'
+      })
       .populate('createdBy', 'fullName email');
 
     // Handle Razorpay integration for quotations
@@ -201,7 +253,10 @@ router.put('/:id', auth, async (req, res) => {
       req.body,
       { new: true, runValidators: true }
     )
-      .populate('client', 'name email phone')
+      .populate({
+        path: 'client',
+        select: 'fullName name email phone'
+      })
       .populate('createdBy', 'fullName email');
 
     if (!invoice) {
@@ -269,7 +324,10 @@ router.patch('/:id/status', auth, async (req, res) => {
       { status },
       { new: true, runValidators: true }
     )
-      .populate('client', 'name email phone')
+      .populate({
+        path: 'client',
+        select: 'fullName name email phone'
+      })
       .populate('createdBy', 'fullName email');
 
     if (!invoice) {
@@ -329,7 +387,10 @@ router.post('/:id/payments', auth, async (req, res) => {
 
     // Populate and return updated invoice
     const updatedInvoice = await Invoice.findById(invoice._id)
-      .populate('client', 'name email phone')
+      .populate({
+        path: 'client',
+        select: 'fullName name email phone'
+      })
       .populate('createdBy', 'fullName email')
       .populate('payments.recordedBy', 'fullName email');
 

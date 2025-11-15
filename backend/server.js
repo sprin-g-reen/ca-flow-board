@@ -43,10 +43,14 @@ import viewRoutes from './routes/views.js';
 import vitalsRoutes from './routes/vitals.js';
 import aiRoutes from './routes/ai.js';
 import recycleBinRoutes from './routes/recycleBin.js';
+import reportsRoutes from './routes/reports.js';
+import logsRoutes from './routes/logs.js';
+import twoFactorRoutes from './routes/twoFactor.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { notFound } from './middleware/notFound.js';
-// import { seedTemplates, seedChatRooms } from './seeds/index.js';
+import { seedTemplatesForAllFirms } from './seeds/index.js';
 import chatWebSocketService from './services/chatWebSocket.js';
+import taskWebSocketService from './services/taskWebSocket.js';
 import { createServer } from 'http';
 
 const app = express();
@@ -57,20 +61,41 @@ const initializeApp = async () => {
   try {
     await connectDB();
     
-    // Seed templates if they don't exist
+    // Check if we need to seed templates
     const TaskTemplate = (await import('./models/TaskTemplate.js')).default;
-    const templateCount = await TaskTemplate.countDocuments();
+    const Firm = (await import('./models/Firm.js')).default;
     
-    if (templateCount === 0) {
-      console.log('📝 No templates found, seeding default templates...');
-      // await seedTemplates();
-      console.log('⚠️  Seeding disabled - seeds/index.js not found');
-    } else {
-      console.log(`📊 Found ${templateCount} existing templates`);
+    const firmCount = await Firm.countDocuments();
+    
+    if (firmCount === 0) {
+      console.log('ℹ️  No firms found. Templates will be seeded after firm creation.');
+      return;
     }
-
-    // Seed chat rooms
-    // await seedChatRooms();
+    
+    // Check if any firm is missing templates
+    const firms = await Firm.find({ isActive: true });
+    let firmsNeedingTemplates = 0;
+    
+    for (const firm of firms) {
+      const firmTemplateCount = await TaskTemplate.countDocuments({ 
+        firm: firm._id, 
+        is_deleted: false 
+      });
+      if (firmTemplateCount === 0) {
+        firmsNeedingTemplates++;
+      }
+    }
+    
+    if (firmsNeedingTemplates > 0) {
+      console.log(`📝 ${firmsNeedingTemplates} firm(s) need templates. Seeding...`);
+      const result = await seedTemplatesForAllFirms();
+      if (result.success && result.seeded > 0) {
+        console.log(`✅ Successfully seeded templates for ${result.seeded} firm(s)`);
+      }
+    } else {
+      const totalTemplates = await TaskTemplate.countDocuments({ is_deleted: false });
+      console.log(`📊 All firms have templates. Total: ${totalTemplates} templates across ${firmCount} firms`);
+    }
   } catch (error) {
     console.error('❌ App initialization failed:', error);
   }
@@ -115,6 +140,27 @@ const limiter = rateLimit({
 app.use(cors(corsOptions));
 // Explicitly handle preflight requests for all routes
 app.options('*', cors(corsOptions));
+
+// Development fallback: ensure CORS headers are present on ALL /api responses
+// This helps when some error paths or middleware return responses without the CORS headers
+// and avoids 'No Access-Control-Allow-Origin header is present' in dev environments.
+app.use('/api', (req, res, next) => {
+  try {
+    const origin = req.headers.origin || '';
+    // Mirror the request origin (preferred) or fall back to '*' for local dev
+    if (origin) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+    } else {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+    }
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Headers', Array.isArray(corsOptions.allowedHeaders) ? corsOptions.allowedHeaders.join(', ') : (corsOptions.allowedHeaders || 'Content-Type, Authorization'));
+    res.setHeader('Access-Control-Allow-Methods', Array.isArray(corsOptions.methods) ? corsOptions.methods.join(', ') : (corsOptions.methods || 'GET,POST,PUT,DELETE,OPTIONS'));
+  } catch (e) {
+    // no-op; header setting should not break the request flow
+  }
+  next();
+});
 
 // Apply rate limiting to API routes (but not health checks)
 app.use('/api/', (req, res, next) => {
@@ -177,6 +223,9 @@ app.use('/api/views', viewRoutes);
 app.use('/api/vitals', vitalsRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/recycle-bin', recycleBinRoutes);
+app.use('/api/reports', reportsRoutes);
+app.use('/api/logs', logsRoutes);
+app.use('/api/2fa', twoFactorRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -212,8 +261,13 @@ const server = createServer(app);
 chatWebSocketService.initialize(server);
 chatWebSocketService.startHealthCheck();
 
-// Make WebSocket service available to routes
+// Initialize task WebSocket service
+taskWebSocketService.initialize(server);
+taskWebSocketService.startHealthCheck();
+
+// Make WebSocket services available to routes
 app.set('chatWS', chatWebSocketService);
+app.set('taskWS', taskWebSocketService);
 
 // Start server
 server.listen(PORT, '0.0.0.0', () => {
@@ -221,6 +275,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`);
   console.log(`🔗 WebSocket server ready for chat connections`);
+  console.log(`🔗 WebSocket server ready for task updates`);
   console.log(`🌍 Server accessible on all network interfaces (0.0.0.0)`);
 });
 

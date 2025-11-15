@@ -24,6 +24,9 @@ import OwnerAnalytics from './pages/owner/OwnerAnalytics';
 import OwnerSettings from './pages/owner/OwnerSettings';
 import OwnerTemplates from './pages/owner/OwnerTemplates';
 import RecycleBin from './pages/owner/RecycleBin';
+import GSTReportMonthly from './pages/owner/reports/GSTReportMonthly';
+import GSTReportQuarterly from './pages/owner/reports/GSTReportQuarterly';
+import GSTReportAnnual from './pages/owner/reports/GSTReportAnnual';
 
 // Admin routes
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -75,6 +78,9 @@ const App = () => (
                 <Route path="analytics" element={<OwnerAnalytics />} />
                 <Route path="recycle-bin" element={<RecycleBin />} />
                 <Route path="settings" element={<OwnerSettings />} />
+                <Route path="reports/gst/monthly" element={<GSTReportMonthly />} />
+                <Route path="reports/gst/quarterly" element={<GSTReportQuarterly />} />
+                <Route path="reports/gst/annual" element={<GSTReportAnnual />} />
               </Route>
               
               {/* Super Admin routes */}

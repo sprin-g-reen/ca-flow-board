@@ -17,7 +17,7 @@ const generateToken = (id) => {
 // @route   POST /api/auth/register
 // @access  Public
 router.post('/register', [
-  body('email').isEmail().normalizeEmail(),
+  body('username').isLength({ min: 3 }).trim().matches(/^[a-zA-Z0-9._-]{3,30}$/),
   body('password').isLength({ min: 6 }),
   body('fullName').trim().isLength({ min: 2 }),
   body('role').isIn(['owner', 'admin', 'employee', 'client'])
@@ -32,14 +32,14 @@ router.post('/register', [
       });
     }
 
-    const { email, password, fullName, role, firmName, phone } = req.body;
+    const { username, email, password, fullName, role, firmName, phone } = req.body;
 
-    // Check if user already exists
-    const existingUser = await User.findOne({ email });
+    // Check if user already exists by username
+    const existingUser = await User.findOne({ username: username.toLowerCase().trim() });
     if (existingUser) {
       return res.status(400).json({
         success: false,
-        message: 'User already exists with this email'
+        message: 'User already exists with this username'
       });
     }
 
@@ -57,6 +57,7 @@ router.post('/register', [
 
       // Create a temporary user first without firmId validation
       const tempUserData = {
+        username: username.toLowerCase().trim(),
         email,
         password,
         fullName,
@@ -90,6 +91,7 @@ router.post('/register', [
     } else {
       // For non-owner roles, firmId should be provided or determined
       user = await User.create({
+        username: username.toLowerCase().trim(),
         email,
         password,
         fullName,
@@ -127,7 +129,7 @@ router.post('/register', [
 // @route   POST /api/auth/login
 // @access  Public
 router.post('/login', [
-  body('email').isEmail().normalizeEmail(),
+  body('username').isLength({ min: 3 }).trim(),
   body('password').exists()
 ], async (req, res) => {
   try {
@@ -140,10 +142,15 @@ router.post('/login', [
       });
     }
 
-    const { email, password } = req.body;
+  const { username, password } = req.body;
 
-    // Find user and include password for comparison
-    const user = await User.findOne({ email }).select('+password').populate('firmId');
+  // Find user by username OR email (flexible login)
+  const user = await User.findOne({
+    $or: [
+      { username: username.toLowerCase().trim() },
+      { email: username.toLowerCase().trim() }
+    ]
+  }).select('+password').populate('firmId');
 
     if (!user) {
       return res.status(401).json({
@@ -247,7 +254,7 @@ router.post('/logout', (req, res) => {
 // @route   POST /api/auth/forgot-password
 // @access  Public
 router.post('/forgot-password', [
-  body('email').isEmail().normalizeEmail()
+  body('username').isLength({ min: 3 }).trim()
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -259,13 +266,13 @@ router.post('/forgot-password', [
       });
     }
 
-    const { email } = req.body;
-    const user = await User.findOne({ email });
+    const { username } = req.body;
+    const user = await User.findOne({ username: username.toLowerCase().trim() });
 
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: 'User not found with this email'
+        message: 'User not found with this username'
       });
     }
 

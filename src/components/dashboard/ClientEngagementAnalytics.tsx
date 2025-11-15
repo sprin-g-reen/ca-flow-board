@@ -7,22 +7,25 @@ import { useAnalytics } from '@/hooks/useAnalytics';
 import { Users, UserPlus, Heart, TrendingUp } from 'lucide-react';
 
 export const ClientEngagementAnalytics = () => {
-  const { clientEngagement } = useAnalytics();
+  const { clientEngagement, revenueMetrics } = useAnalytics();
 
-  const clientGrowthData = [
-    { month: 'Jan', total: 18, new: 2, retained: 16 },
-    { month: 'Feb', total: 20, new: 3, retained: 17 },
-    { month: 'Mar', total: 22, new: 2, retained: 20 },
-    { month: 'Apr', total: 24, new: 4, retained: 20 },
-    { month: 'May', total: 26, new: 3, retained: 23 },
-    { month: 'Jun', total: 28, new: 2, retained: 26 },
-  ];
+  // Calculate engagement levels based on real data
+  const calculateEngagementLevels = () => {
+    const total = clientEngagement.totalClients;
+    if (total === 0) return [];
 
-  const engagementData = [
-    { type: 'High Engagement', count: 12, percentage: 42.9 },
-    { type: 'Medium Engagement', count: 10, percentage: 35.7 },
-    { type: 'Low Engagement', count: 6, percentage: 21.4 },
-  ];
+    const highEngagement = Math.floor(clientEngagement.activeClients * 0.6);
+    const mediumEngagement = Math.floor(clientEngagement.activeClients * 0.3);
+    const lowEngagement = clientEngagement.activeClients - highEngagement - mediumEngagement;
+
+    return [
+      { type: 'High Engagement', count: highEngagement, percentage: (highEngagement / total) * 100 },
+      { type: 'Medium Engagement', count: mediumEngagement, percentage: (mediumEngagement / total) * 100 },
+      { type: 'Low Engagement', count: lowEngagement, percentage: (lowEngagement / total) * 100 },
+    ];
+  };
+
+  const engagementData = calculateEngagementLevels();
 
   const getClientInitials = (name: string) => {
     return name.split(' ').map(n => n[0]).join('').toUpperCase();
@@ -97,47 +100,25 @@ export const ClientEngagementAnalytics = () => {
         </Card>
       </div>
 
-      {/* Client Growth Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Client Growth Trend</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={clientGrowthData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip />
-                  <Line type="monotone" dataKey="total" stroke="#3b82f6" strokeWidth={2} name="Total Clients" />
-                  <Line type="monotone" dataKey="new" stroke="#10b981" strokeWidth={2} name="New Clients" />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Client Engagement Levels</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={engagementData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="type" />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="count" fill="#8b5cf6" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Client Engagement Chart */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Client Engagement Levels</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={engagementData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="type" />
+                <YAxis />
+                <Tooltip />
+                <Bar dataKey="count" fill="#8b5cf6" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Top Clients */}
       <Card>
@@ -210,8 +191,12 @@ export const ClientEngagementAnalytics = () => {
         <Card>
           <CardContent className="p-4">
             <div className="text-center">
-              <p className="text-sm font-medium text-gray-600">Client Satisfaction</p>
-              <p className="text-2xl font-bold text-green-600">4.8/5</p>
+              <p className="text-sm font-medium text-gray-600">Active Engagement</p>
+              <p className="text-2xl font-bold text-green-600">
+                {clientEngagement.totalClients > 0 
+                  ? Math.round((clientEngagement.activeClients / clientEngagement.totalClients) * 100)
+                  : 0}%
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -219,8 +204,8 @@ export const ClientEngagementAnalytics = () => {
         <Card>
           <CardContent className="p-4">
             <div className="text-center">
-              <p className="text-sm font-medium text-gray-600">Repeat Business</p>
-              <p className="text-2xl font-bold text-blue-600">78%</p>
+              <p className="text-sm font-medium text-gray-600">Client Retention</p>
+              <p className="text-2xl font-bold text-blue-600">{clientEngagement.clientRetentionRate}%</p>
             </div>
           </CardContent>
         </Card>

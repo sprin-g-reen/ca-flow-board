@@ -237,7 +237,6 @@ taskSchema.index({ type: 1 });
 taskSchema.index({ isRecurring: 1 });
 taskSchema.index({ billable: 1 });
 taskSchema.index({ invoiced: 1 });
-taskSchema.index({ taskId: 1 });
 taskSchema.index({ isArchived: 1 });
 
 // Virtual for overdue status

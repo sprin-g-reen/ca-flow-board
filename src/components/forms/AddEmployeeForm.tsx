@@ -7,6 +7,7 @@ import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
+import { Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { useEmployees } from '@/hooks/useEmployees';
 
@@ -18,6 +19,7 @@ interface AddEmployeeFormProps {
 
 export function AddEmployeeForm({ onSuccess, initialData, isEditing = false }: AddEmployeeFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const { addEmployee } = useEmployees();
   
   // Create dynamic schema based on whether we're editing or creating
@@ -136,12 +138,27 @@ export function AddEmployeeForm({ onSuccess, initialData, isEditing = false }: A
                   Password {isEditing && "(Leave blank to keep current password)"}
                 </FormLabel>
                 <FormControl>
-                  <Input 
-                    placeholder={isEditing ? "Enter new password (optional)" : "Enter password"} 
-                    type="password" 
-                    className="h-11 border-gray-200 focus:border-blue-500 focus:ring-blue-500" 
-                    {...field} 
-                  />
+                  <div className="relative">
+                    <Input 
+                      placeholder={isEditing ? "Enter new password (optional)" : "Enter password"} 
+                      type={showPassword ? "text" : "password"} 
+                      className="h-11 border-gray-200 focus:border-blue-500 focus:ring-blue-500 pr-10" 
+                      {...field} 
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4 text-gray-400" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-gray-400" />
+                      )}
+                    </Button>
+                  </div>
                 </FormControl>
                 <FormMessage />
               </FormItem>

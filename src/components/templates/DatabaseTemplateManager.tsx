@@ -11,6 +11,7 @@ import { useRecurringTasks } from '@/hooks/useRecurringTasks';
 import { useEmployees } from '@/hooks/useEmployees';
 import { DatabaseCreateTemplateForm } from './DatabaseCreateTemplateForm';
 import { toast } from 'sonner';
+import Swal from 'sweetalert2';
 
 export function DatabaseTemplateManager() {
   const [showCreateTemplate, setShowCreateTemplate] = useState(false);
@@ -61,9 +62,20 @@ export function DatabaseTemplateManager() {
     return employee?.employee_id || 'Unassigned';
   };
 
-  const handleDeleteTemplate = (templateId: string) => {
-    if (confirm('Are you sure you want to delete this template?')) {
+  const handleDeleteTemplate = async (templateId: string) => {
+    const result = await Swal.fire({
+      title: 'Delete Template?',
+      text: 'Are you sure you want to delete this template?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#3085d6',
+      cancelButtonColor: '#d33',
+      confirmButtonText: 'Yes, delete it!'
+    });
+
+    if (result.isConfirmed) {
       deleteTemplate(templateId);
+      Swal.fire('Deleted!', 'Template has been deleted.', 'success');
     }
   };
 

@@ -9,6 +9,7 @@ import { deleteTaskTemplate } from '@/store/slices/tasksSlice';
 import { Badge } from '@/components/ui/badge';
 import { FormDialog } from '@/components/shared/FormDialog';
 import { CreateTemplateForm } from '@/components/forms/CreateTemplateForm';
+import Swal from 'sweetalert2';
 
 export function TemplateManager() {
   const [showCreateTemplate, setShowCreateTemplate] = useState(false);
@@ -34,9 +35,20 @@ export function TemplateManager() {
     }
   };
 
-  const handleDeleteTemplate = (templateId: string) => {
-    if (confirm('Are you sure you want to delete this template?')) {
+  const handleDeleteTemplate = async (templateId: string) => {
+    const result = await Swal.fire({
+      title: 'Delete Template?',
+      text: 'Are you sure you want to delete this template?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#3085d6',
+      cancelButtonColor: '#d33',
+      confirmButtonText: 'Yes, delete it!'
+    });
+
+    if (result.isConfirmed) {
       dispatch(deleteTaskTemplate(templateId));
+      Swal.fire('Deleted!', 'Template has been deleted.', 'success');
     }
   };
 

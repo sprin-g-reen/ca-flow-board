@@ -51,7 +51,7 @@ const taskTemplateSchema = new mongoose.Schema({
   },
   recurrence_pattern: {
     type: String,
-    enum: ['monthly', 'yearly', 'custom'],
+    enum: ['monthly', 'quarterly', 'yearly', 'custom'],
     required: function() {
       return this.is_recurring;
     }

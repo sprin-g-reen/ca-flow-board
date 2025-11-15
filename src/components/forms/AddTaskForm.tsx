@@ -221,7 +221,7 @@ export function AddTaskForm({ onSuccess }: { onSuccess: () => void }) {
     const endCount = values.recurrence_end_count || 10;
     const endDate = values.recurrence_end_date ? new Date(values.recurrence_end_date) : null;
     
-    let currentDate = new Date(startDate);
+    const currentDate = new Date(startDate);
     let count = 0;
     const maxDates = endType === 'after' ? endCount : 10; // Show max 10 dates for preview
     

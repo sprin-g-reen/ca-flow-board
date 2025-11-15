@@ -4,7 +4,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
 
 // Type definitions for API requests and responses
 interface LoginCredentials {
-  email: string;
+  username: string;
   password: string;
 }
 
