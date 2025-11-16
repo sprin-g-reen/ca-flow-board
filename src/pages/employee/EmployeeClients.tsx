@@ -39,10 +39,21 @@ const EmployeeClients = () => {
     // Get unique client IDs from tasks assigned to this employee
     const assignedClientIds = new Set(
       tasks
-        .filter(task => 
-          task.assignedTo?.includes(user.id || user.email || '') ||
-          task.assignedTo?.some((id: string) => id === user.id)
-        )
+        .filter(task => {
+          if (!task.assignedTo || !Array.isArray(task.assignedTo)) return false;
+          
+          // Handle both string IDs and user objects with _id property
+          return task.assignedTo.some((assigned: any) => {
+            if (typeof assigned === 'string') {
+              // Direct string ID comparison
+              return assigned === user.id || assigned === user.email;
+            } else if (assigned && typeof assigned === 'object') {
+              // User object comparison - check _id property
+              return assigned._id === user.id || assigned.email === user.email;
+            }
+            return false;
+          });
+        })
         .map(task => task.clientId)
         .filter(Boolean)
     );
