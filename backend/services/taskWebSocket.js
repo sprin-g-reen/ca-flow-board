@@ -24,9 +24,19 @@ class TaskWebSocketService {
             return;
           }
 
-          // Verify token
-          const decoded = jwt.verify(token, process.env.JWT_SECRET);
-          const user = await User.findById(decoded.userId).populate('firmId');
+            // Verify token
+            let decoded;
+            try {
+              decoded = jwt.verify(token, process.env.JWT_SECRET);
+            } catch (err) {
+              console.error('Task WS JWT verify failed:', err && err.message ? err.message : err);
+              callback(false, 401, 'Unauthorized');
+              return;
+            }
+
+            // Support tokens with `id` or `userId` claim
+            const userId = decoded.userId || decoded.id || decoded._id;
+            const user = await User.findById(userId).populate('firmId');
           
           if (!user) {
             callback(false, 401, 'User not found');

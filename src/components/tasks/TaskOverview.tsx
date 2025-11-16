@@ -28,7 +28,9 @@ export default function TaskOverview({ task, client, assignedEmployees = [], onC
   const [isTeamEditDialogOpen, setIsTeamEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isArchiveDialogOpen, setIsArchiveDialogOpen] = useState(false);
-  const [selectedClientId, setSelectedClientId] = useState(task.clientId || '');
+  const [selectedClientId, setSelectedClientId] = useState(
+    task.clientId || (client?.id || client?._id) || ''
+  );
   const [selectedEmployeeId, setSelectedEmployeeId] = useState(
     assignedEmployees.length > 0 ? assignedEmployees[0]._id : ''
   );
@@ -288,23 +290,29 @@ export default function TaskOverview({ task, client, assignedEmployees = [], onC
                     <DialogTitle>Change Client Assignment</DialogTitle>
                   </DialogHeader>
                   <div className="space-y-4">
-                    <div>
+                    <div className="space-y-2">
                       <Label htmlFor="client-select">Select Client</Label>
                       <Select 
-                        value={selectedClientId} 
+                        value={selectedClientId || 'none'} 
                         onValueChange={setSelectedClientId}
                         disabled={isLoadingClients}
                       >
-                        <SelectTrigger>
+                        <SelectTrigger className="w-full">
                           <SelectValue placeholder="Select a client..." />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="max-h-[300px]">
                           <SelectItem value="none">No Client</SelectItem>
-                          {clients.map((c) => (
-                            <SelectItem key={c.id} value={c.id}>
-                              {c.name}
-                            </SelectItem>
-                          ))}
+                          {clients && clients.length > 0 ? (
+                            clients.map((c) => (
+                              <SelectItem key={c.id || c._id} value={c.id || c._id}>
+                                {c.name}
+                              </SelectItem>
+                            ))
+                          ) : (
+                            <div className="px-2 py-1.5 text-sm text-gray-500">
+                              No clients available
+                            </div>
+                          )}
                         </SelectContent>
                       </Select>
                     </div>

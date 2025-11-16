@@ -24,9 +24,21 @@ export const useSettings = (options: UseSettingsOptions = {}) => {
     refetch
   } = useQuery({
     queryKey: ['settings', category],
-    queryFn: () => category ? settingsService.getSettings(category) : settingsService.getAllSettings(),
+    queryFn: async () => {
+      try {
+        return category ? await settingsService.getSettings(category) : await settingsService.getAllSettings();
+      } catch (err: any) {
+        // Silently handle 403 errors for employees who don't have access to settings
+        if (err.message?.includes('Access denied') || err.message?.includes('403')) {
+          console.log('⚠️ Settings access denied (employee role) - using defaults');
+          return category ? {} : { company: {}, notification: {}, security: {}, integration: {} };
+        }
+        throw err;
+      }
+    },
     staleTime: 1000 * 60 * 5, // 5 minutes
     gcTime: 1000 * 60 * 10, // 10 minutes
+    retry: false, // Don't retry on 403
   });
 
   // Update settings mutation

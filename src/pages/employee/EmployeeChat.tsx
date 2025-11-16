@@ -8,11 +8,6 @@ import { Badge } from '@/components/ui/badge';
 import { 
   Search, 
   Send, 
-  Paperclip, 
-  MoreVertical, 
-  Phone, 
-  Video,
-  Smile,
   Circle,
   Loader2
 } from 'lucide-react';
@@ -36,7 +31,9 @@ export default function EmployeeChat() {
     sendMessage,
     joinRoom,
     isConnected,
-    isSending
+    isSending,
+    roomsError,
+    messagesError
   } = useChat();
 
   // Get selected room data
@@ -91,22 +88,29 @@ export default function EmployeeChat() {
     );
   }
 
-  return (
-    <div className="h-[calc(100vh-4rem)] flex relative">
-      {/* Connection Status */}
-      {!isConnected && (
-        <div className="absolute top-2 right-2 z-50">
-          <Badge variant="destructive" className="flex items-center gap-1">
-            <Circle className="h-2 w-2 fill-current" />
-            Disconnected
-          </Badge>
+  if (roomsError) {
+    return (
+      <div className="h-[calc(100vh-4rem)] flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-4xl mb-2">⚠️</div>
+          <h3 className="text-lg font-semibold mb-1">Failed to load chat</h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            {roomsError instanceof Error ? roomsError.message : 'An error occurred'}
+          </p>
+          <Button onClick={() => window.location.reload()}>
+            Reload Page
+          </Button>
         </div>
-      )}
+      </div>
+    );
+  }
 
+  return (
+    <div className="h-[calc(100vh-4rem)] flex bg-background">
       {/* Left Sidebar - Chat List */}
-      <div className="w-80 border-r border-border flex flex-col bg-card">
-        <div className="p-4 border-b border-border">
-          <h2 className="text-xl font-bold mb-3">Messages</h2>
+      <div className="w-80 border-r border-border flex flex-col bg-card shadow-sm">
+        <div className="p-4 border-b border-border bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950 dark:to-purple-950">
+          <h2 className="text-xl font-bold mb-3 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Messages</h2>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -119,7 +123,16 @@ export default function EmployeeChat() {
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {filteredRooms.map((room: ChatRoom) => {
+          {filteredRooms.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full p-6 text-center">
+              <div className="text-4xl mb-3">💬</div>
+              <h3 className="font-semibold mb-1">No conversations yet</h3>
+              <p className="text-sm text-muted-foreground">
+                Start a new conversation to get started
+              </p>
+            </div>
+          ) : (
+            filteredRooms.map((room: ChatRoom) => {
             const displayName = getRoomDisplayName(room);
             const roomOnline = room.type === 'direct' 
               ? room.participants.some(p => p.user._id !== user?.id && isUserOnline(p.user._id))
@@ -129,19 +142,19 @@ export default function EmployeeChat() {
               <div
                 key={room._id}
                 onClick={() => joinRoom(room._id)}
-                className={`p-4 cursor-pointer hover:bg-accent transition-colors border-b border-border ${
-                  selectedRoom?._id === room._id ? 'bg-accent' : ''
+                className={`p-4 cursor-pointer hover:bg-accent/50 transition-all duration-200 border-b border-border group ${
+                  selectedRoom?._id === room._id ? 'bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/50 dark:to-purple-950/50 border-l-4 border-l-blue-500' : ''
                 }`}
               >
                 <div className="flex items-start gap-3">
                   <div className="relative">
-                    <Avatar className="h-12 w-12">
-                      <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-500 text-white font-semibold">
+                    <Avatar className="h-12 w-12 ring-2 ring-transparent group-hover:ring-blue-500/20 transition-all">
+                      <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-500 text-white font-semibold text-lg">
                         {displayName.charAt(0).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
                     {roomOnline && (
-                      <Circle className="absolute -bottom-0.5 -right-0.5 h-3 w-3 fill-green-500 text-green-500" />
+                      <Circle className="absolute -bottom-0.5 -right-0.5 h-3 w-3 fill-green-500 text-green-500 ring-2 ring-card" />
                     )}
                   </div>
 
@@ -155,11 +168,11 @@ export default function EmployeeChat() {
                       )}
                     </div>
                     <div className="flex items-center justify-between">
-                      <p className="text-sm text-muted-foreground truncate">
+                      <p className={`text-sm truncate ${room.unreadCount > 0 ? 'font-medium text-foreground' : 'text-muted-foreground'}`}>
                         {room.lastMessage?.content || 'No messages yet'}
                       </p>
                       {room.unreadCount > 0 && (
-                        <Badge className="bg-blue-600 text-white text-xs h-5 min-w-5 flex items-center justify-center rounded-full">
+                        <Badge className="bg-gradient-to-r from-blue-600 to-purple-600 text-white text-xs h-5 min-w-5 flex items-center justify-center rounded-full ml-2 shadow-sm">
                           {room.unreadCount}
                         </Badge>
                       )}
@@ -168,7 +181,8 @@ export default function EmployeeChat() {
                 </div>
               </div>
             );
-          })}
+          })
+          )}
         </div>
       </div>
 
@@ -176,43 +190,63 @@ export default function EmployeeChat() {
       {selectedRoom ? (
         <div className="flex-1 flex flex-col">
           {/* Chat Header */}
-          <div className="h-16 border-b border-border px-6 flex items-center justify-between bg-card">
+          <div className="h-16 border-b border-border px-6 flex items-center justify-between bg-gradient-to-r from-card to-card/50 backdrop-blur-sm">
             <div className="flex items-center gap-3">
-              <Avatar className="h-10 w-10">
+              <Avatar className="h-10 w-10 ring-2 ring-blue-500/20">
                 <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-500 text-white font-semibold">
                   {getRoomDisplayName(selectedRoom).charAt(0).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
               <div>
-                <h3 className="font-semibold">{getRoomDisplayName(selectedRoom)}</h3>
-                <p className="text-xs text-muted-foreground">
+                <h3 className="font-semibold text-lg">{getRoomDisplayName(selectedRoom)}</h3>
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
                   {selectedRoom.type === 'general' 
-                    ? `${selectedRoom.participants?.length || 0} participants`
+                    ? (
+                      <>
+                        <span>{selectedRoom.participants?.length || 0} participants</span>
+                      </>
+                    )
                     : selectedRoom.participants?.some(p => p.user._id !== user?.id && isUserOnline(p.user._id))
-                    ? 'Online' 
-                    : 'Offline'}
+                    ? (
+                      <>
+                        <Circle className="h-2 w-2 fill-green-500 text-green-500" />
+                        <span>Online</span>
+                      </>
+                    )
+                    : (
+                      <>
+                        <Circle className="h-2 w-2 fill-gray-400 text-gray-400" />
+                        <span>Offline</span>
+                      </>
+                    )}
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="icon" title="Voice Call">
-                <Phone className="h-5 w-5" />
-              </Button>
-              <Button variant="ghost" size="icon" title="Video Call">
-                <Video className="h-5 w-5" />
-              </Button>
-              <Button variant="ghost" size="icon" title="More Options">
-                <MoreVertical className="h-5 w-5" />
-              </Button>
+              {/* Removed Voice/Video call buttons and More Options for employees */}
+              {/* Employees can only send messages, not manage rooms or make calls */}
             </div>
           </div>
 
           {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto p-6 bg-muted/20">
+          <div className="flex-1 overflow-y-auto p-6 bg-gradient-to-b from-muted/30 to-muted/10">
             {messagesLoading ? (
               <div className="flex items-center justify-center h-full">
-                <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+                <div className="text-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">Loading messages...</p>
+                </div>
+              </div>
+            ) : messages.length === 0 ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center">
+                  <div className="text-6xl mb-4">💬</div>
+                  <h3 className="text-lg font-semibold mb-2">No messages yet</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Be the first to start the conversation!
+                  </p>
+                </div>
               </div>
             ) : (
               <>
@@ -221,10 +255,10 @@ export default function EmployeeChat() {
                   return (
                     <div
                       key={message._id}
-                      className={`flex mb-4 ${isOwn ? 'justify-end' : 'justify-start'}`}
+                      className={`flex mb-4 animate-in fade-in slide-in-from-bottom-2 duration-300 ${isOwn ? 'justify-end' : 'justify-start'}`}
                     >
                       {!isOwn && (
-                        <Avatar className="h-8 w-8 mr-2">
+                        <Avatar className="h-8 w-8 mr-2 ring-2 ring-transparent group-hover:ring-blue-500/20 transition-all">
                           <AvatarFallback className="bg-gradient-to-br from-gray-500 to-gray-600 text-white text-xs">
                             {message.sender.fullName.charAt(0).toUpperCase()}
                           </AvatarFallback>
@@ -233,18 +267,18 @@ export default function EmployeeChat() {
 
                       <div className={`max-w-[60%] ${isOwn ? 'items-end' : 'items-start'} flex flex-col`}>
                         {!isOwn && (
-                          <span className="text-xs text-muted-foreground mb-1 ml-1">
+                          <span className="text-xs font-medium text-muted-foreground mb-1 ml-1">
                             {message.sender.fullName}
                           </span>
                         )}
                         <div
-                          className={`rounded-2xl px-4 py-2 ${
+                          className={`rounded-2xl px-4 py-3 shadow-sm ${
                             isOwn
                               ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-br-none'
                               : 'bg-card border border-border rounded-bl-none'
                           }`}
                         >
-                          <p className="text-sm">{message.content}</p>
+                          <p className="text-sm leading-relaxed">{message.content}</p>
                         </div>
                         <span className="text-xs text-muted-foreground mt-1 ml-1">
                           {formatDistanceToNow(new Date(message.createdAt), { addSuffix: true })}
@@ -252,7 +286,7 @@ export default function EmployeeChat() {
                       </div>
 
                       {isOwn && (
-                        <Avatar className="h-8 w-8 ml-2">
+                        <Avatar className="h-8 w-8 ml-2 ring-2 ring-blue-500/20">
                           <AvatarFallback className="bg-gradient-to-br from-blue-600 to-purple-600 text-white text-xs">
                             {user?.fullName?.charAt(0).toUpperCase() || 'Y'}
                           </AvatarFallback>
@@ -266,34 +300,32 @@ export default function EmployeeChat() {
             )}
           </div>
 
-          {/* Message Input */}
-          <div className="p-4 border-t border-border bg-card">
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="icon" title="Attach File">
-                <Paperclip className="h-5 w-5" />
-              </Button>
-              <Button variant="ghost" size="icon" title="Add Emoji">
-                <Smile className="h-5 w-5" />
-              </Button>
-              
-              <Input
-                placeholder="Type a message..."
-                value={messageInput}
-                onChange={(e) => setMessageInput(e.target.value)}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSendMessage();
-                  }
-                }}
-                className="flex-1"
-                disabled={isSending}
-              />
+          {/* Message Input - Simple text-only for employees */}
+          <div className="p-4 border-t border-border bg-card/50 backdrop-blur-sm">
+            <div className="flex items-end gap-3">
+              <div className="flex-1 relative">
+                <Input
+                  placeholder="Type your message..."
+                  value={messageInput}
+                  onChange={(e) => setMessageInput(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }
+                  }}
+                  className="pr-4 py-3 rounded-xl border-2 focus:border-blue-500 transition-colors"
+                  disabled={isSending}
+                />
+                <p className="text-xs text-muted-foreground mt-1 ml-1">
+                  Press Enter to send
+                </p>
+              </div>
               
               <Button 
                 onClick={handleSendMessage}
                 disabled={!messageInput.trim() || isSending}
-                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 rounded-xl px-6 py-3 h-auto shadow-lg transition-all hover:shadow-xl disabled:opacity-50"
               >
                 {isSending ? (
                   <Loader2 className="h-5 w-5 animate-spin" />
@@ -305,12 +337,16 @@ export default function EmployeeChat() {
           </div>
         </div>
       ) : (
-        <div className="flex-1 flex items-center justify-center bg-muted/20">
+        <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-muted/30 to-muted/10">
           <div className="text-center">
-            <div className="text-4xl mb-2">💬</div>
-            <h3 className="text-lg font-semibold mb-1">No conversation selected</h3>
-            <p className="text-sm text-muted-foreground">
-              Choose a conversation from the list to start chatting
+            <div className="w-32 h-32 mx-auto mb-6 rounded-full bg-gradient-to-br from-blue-100 to-purple-100 dark:from-blue-900 dark:to-purple-900 flex items-center justify-center">
+              <div className="text-6xl">💬</div>
+            </div>
+            <h3 className="text-2xl font-bold mb-2 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+              No conversation selected
+            </h3>
+            <p className="text-sm text-muted-foreground max-w-sm">
+              Choose a conversation from the list to start chatting with your team
             </p>
           </div>
         </div>

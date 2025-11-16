@@ -52,7 +52,7 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB limit
+    fileSize: 50 * 1024 * 1024 // 50MB limit (increased from 10MB)
   },
   fileFilter: fileFilter
 });
@@ -458,10 +458,19 @@ router.put('/:id', auth, async (req, res) => {
       });
     }
 
-    // Only allow updating if user is assigned to task, assigned by user, or is admin/owner
-    const canUpdate = task.assignedTo?.toString() === req.user._id.toString() ||
-                     task.assignedBy?.toString() === req.user._id.toString() ||
-                     ['admin', 'owner', 'superadmin'].includes(req.user.role);
+    // Check if user can update task:
+    // 1. User is assigned to the task (in assignedTo array)
+    // 2. User is a collaborator on the task
+    // 3. User created the task (assignedBy)
+    // 4. User is admin/owner/superadmin
+    const isAssigned = Array.isArray(task.assignedTo) && 
+                       task.assignedTo.some(assigned => assigned.toString() === req.user._id.toString());
+    const isCollaborator = Array.isArray(task.collaborators) && 
+                          task.collaborators.some(collab => collab.toString() === req.user._id.toString());
+    const isCreator = task.assignedBy?.toString() === req.user._id.toString();
+    const isAdmin = ['admin', 'owner', 'superadmin'].includes(req.user.role);
+
+    const canUpdate = isAssigned || isCollaborator || isCreator || isAdmin;
 
     if (!canUpdate) {
       return res.status(403).json({
@@ -1209,61 +1218,101 @@ router.post('/bulk-archive', auth, async (req, res) => {
 // @desc    Upload document to task
 // @route   POST /api/tasks/:id/documents
 // @access  Private
-router.post('/:id/documents', auth, upload.single('file'), async (req, res) => {
-  try {
-    const task = await Task.findOne({
-      _id: req.params.id,
-      firm: req.user.firmId._id
-    });
-
-    if (!task) {
-      return res.status(404).json({
-        success: false,
-        message: 'Task not found'
-      });
-    }
-
-    if (!req.file) {
+router.post('/:id/documents', auth, (req, res) => {
+  upload.single('file')(req, res, async (err) => {
+    // Handle multer errors (file size, type, etc.)
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({
+          success: false,
+          message: 'File size exceeds 50MB limit. Please upload a smaller file.'
+        });
+      }
       return res.status(400).json({
         success: false,
-        message: 'No file uploaded'
+        message: `Upload error: ${err.message}`
+      });
+    } else if (err) {
+      return res.status(400).json({
+        success: false,
+        message: err.message
       });
     }
 
-    const document = {
-      name: req.file.originalname,
-      url: `/uploads/task-documents/${req.file.filename}`,
-      type: req.file.mimetype,
-      size: req.file.size,
-      uploadedBy: req.user._id,
-      uploadedAt: new Date()
-    };
+    try {
+      const task = await Task.findOne({
+        _id: req.params.id,
+        firm: req.user.firmId._id
+      });
 
-    task.documents.push(document);
-    await task.save();
+      if (!task) {
+        return res.status(404).json({
+          success: false,
+          message: 'Task not found'
+        });
+      }
 
-    // Populate the uploaded document
-    const updatedTask = await Task.findById(task._id)
-      .populate('documents.uploadedBy', 'fullName email');
+      if (!req.file) {
+        return res.status(400).json({
+          success: false,
+          message: 'No file uploaded'
+        });
+      }
 
-    // Broadcast via WebSocket
-    if (global.taskWebSocketService) {
-      global.taskWebSocketService.broadcastTaskUpdate(updatedTask);
+      // Ensure documents array exists and is an array
+      if (!Array.isArray(task.documents)) {
+        task.documents = [];
+      }
+
+      // Create document subdocument (plain object, not nested)
+      const document = {
+        name: req.file.originalname,
+        url: `/uploads/task-documents/${req.file.filename}`,
+        type: req.file.mimetype,
+        size: req.file.size,
+        uploadedBy: req.user._id,
+        uploadedAt: new Date()
+      };
+
+      task.documents.push(document);
+      
+      // Save and handle validation errors
+      try {
+        await task.save();
+      } catch (saveError) {
+        console.error('Task save error:', saveError);
+        // If it's a cast error, try to fix the documents array
+        if (saveError.name === 'CastError' && saveError.path === 'documents') {
+          task.documents = [document];
+          await task.save();
+        } else {
+          throw saveError;
+        }
+      }
+
+      // Populate the uploaded document
+      const updatedTask = await Task.findById(task._id)
+        .populate('documents.uploadedBy', 'fullName email');
+
+      // Broadcast via WebSocket
+      if (global.taskWebSocketService) {
+        global.taskWebSocketService.broadcastTaskUpdate(updatedTask);
+      }
+
+      res.json({
+        success: true,
+        message: 'Document uploaded successfully',
+        data: updatedTask.documents[updatedTask.documents.length - 1]
+      });
+    } catch (error) {
+      console.error('Upload task document error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Server error',
+        error: error.message
+      });
     }
-
-    res.json({
-      success: true,
-      message: 'Document uploaded successfully',
-      data: updatedTask.documents[updatedTask.documents.length - 1]
-    });
-  } catch (error) {
-    console.error('Upload task document error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error',
-      error: error.message
-    });
-  }
+  });
 });
 
 // @desc    Get task documents

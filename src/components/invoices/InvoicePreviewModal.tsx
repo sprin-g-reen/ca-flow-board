@@ -571,25 +571,46 @@ export const InvoicePreviewModal = ({
 }: InvoicePreviewModalProps) => {
   const printRef = useRef<HTMLDivElement>(null);
 
+  // CRITICAL: All hooks MUST be called before any conditional returns
+  // This is a React rule - hooks must be called in the same order every render
+  
   // Fetch settings to get account branding
   const { data: settings } = useQuery({
     queryKey: ['settings', 'company'],
     queryFn: () => settingsService.getSettings('company'),
   });
 
-  const collectionMethod = invoiceData.collectionMethod || 'account_1';
-  const accountData = settings?.invoiceAccounts?.[collectionMethod];
-  const branding = accountData?.branding || {};
-
   // Generate stable invoice number (memoized so it doesn't change on re-renders)
   const displayNumber = useMemo(() => {
+    if (!invoiceData) return '';
     const timestamp = Date.now().toString().slice(-8);
     return invoiceData.type === 'quotation' 
       ? `QUO-${timestamp}` 
       : invoiceData.type === 'proforma'
       ? `PRO-${timestamp}`
       : `INV-${timestamp}`;
-  }, [invoiceData.type]); // Only regenerate if type changes
+  }, [invoiceData?.type]); // Safe: handles null invoiceData
+
+  // NOW we can do conditional returns after all hooks are called
+  // If no invoice data yet, show a lightweight loading state so the modal
+  // doesn't attempt to read fields like `collectionMethod` and crash.
+  if (!invoiceData) {
+    return (
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent className="max-w-2xl max-h-[80vh] flex items-center justify-center p-6">
+          <div className="text-center">
+            <div className="mb-2 text-lg font-medium">Loading invoice...</div>
+            <div className="text-sm text-muted-foreground">Fetching invoice details — this may take a moment.</div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  // Invoice data is available, prepare the data for rendering
+  const collectionMethod = invoiceData.collectionMethod || 'account_1';
+  const accountData = settings?.invoiceAccounts?.[collectionMethod];
+  const branding = accountData?.branding || {};
 
   // Determine which template to use based on collection method
   const useSimpleTemplate = collectionMethod === 'account_1';

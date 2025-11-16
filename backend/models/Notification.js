@@ -21,7 +21,8 @@ const notificationSchema = new mongoose.Schema({
       'task_updated',
       'client_document_uploaded',
       'payment_received',
-      'system_announcement'
+      'system_announcement',
+      'chat_mention'
     ],
     required: true
   },
@@ -38,7 +39,7 @@ const notificationSchema = new mongoose.Schema({
   relatedEntity: {
     entityType: {
       type: String,
-      enum: ['Task', 'Client', 'Invoice', 'Payment', 'Document'],
+      enum: ['Task', 'Client', 'Invoice', 'Payment', 'Document', 'ChatMessage', 'ChatRoom'],
       required: false
     },
     entityId: {

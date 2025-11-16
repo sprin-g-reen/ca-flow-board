@@ -28,6 +28,7 @@ import {
   Square
 } from 'lucide-react';
 import { useTasks } from '@/hooks/useTasks';
+import { useClients } from '@/hooks/useClients';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
@@ -36,6 +37,7 @@ const EmployeeDashboard = () => {
   const navigate = useNavigate();
   const { user, name } = useSelector((state: RootState) => state.auth);
   const { tasks, isLoading } = useTasks();
+  const { clients: allClients, isLoading: clientsLoading } = useClients();
   
   // Time tracking state
   const [isTracking, setIsTracking] = useState(false);
@@ -45,11 +47,26 @@ const EmployeeDashboard = () => {
   const displayName = name || user?.fullName || user?.email || 'Employee';
 
   // Filter tasks assigned to current employee
-  const myTasks = Array.isArray(tasks) 
-    ? tasks.filter(task => 
-        task.assignedTo?.includes(user?.id || user?.email || '') ||
-        task.assignedTo?.some((id: string) => id === user?.id)
-      )
+  const myTasks = Array.isArray(tasks)
+    ? tasks.filter((task) => {
+        const assigned = task.assignedTo;
+        if (!assigned) return false;
+
+        // assigned can be an array of strings (ids) or array of user objects
+        if (Array.isArray(assigned)) {
+          return assigned.some((a: any) => {
+            if (typeof a === 'string') {
+              return a === user?.id || a === user?.email;
+            }
+            if (a && typeof a === 'object') {
+              return a._id === user?.id || a.email === user?.email || a._id === user?.email;
+            }
+            return false;
+          });
+        }
+
+        return false;
+      })
     : [];
   
   // Calculate real metrics
@@ -67,9 +84,18 @@ const EmployeeDashboard = () => {
   const efficiency = completionRate;
   
   // Get recent tasks (last 5)
-  const recentTasks = myTasks
+  const recentTasks = [...myTasks]
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 5);
+
+  const getClientName = (task: any) => {
+    // Prefer clientName on task (from useTasks mapping), fall back to lookup in clients
+    if (task.clientName) return task.clientName;
+    const cid = task.clientId || task.client?._id || task.client;
+    if (!cid || !allClients) return cid || 'Unknown';
+    const found = allClients.find((c: any) => c.id === cid || c._id === cid || c.id === String(cid));
+    return found?.name || cid || 'Unknown';
+  };
 
   // Timer effect
   useEffect(() => {
@@ -261,15 +287,15 @@ const EmployeeDashboard = () => {
 
             <div className="grid grid-cols-3 gap-4 pt-2">
               <div className="text-center p-3 bg-green-50 dark:bg-green-950 rounded-lg">
-                <div className="text-lg font-semibold text-green-600">{completedTasks || 8}</div>
+                <div className="text-lg font-semibold text-green-600">{completedTasks}</div>
                 <div className="text-xs text-muted-foreground">Completed</div>
               </div>
               <div className="text-center p-3 bg-blue-50 dark:bg-blue-950 rounded-lg">
-                <div className="text-lg font-semibold text-blue-600">{activeTasks || 12}</div>
+                <div className="text-lg font-semibold text-blue-600">{activeTasks}</div>
                 <div className="text-xs text-muted-foreground">In Progress</div>
               </div>
               <div className="text-center p-3 bg-orange-50 dark:bg-orange-950 rounded-lg">
-                <div className="text-lg font-semibold text-orange-600">{overdueTasks || 3}</div>
+                <div className="text-lg font-semibold text-orange-600">{overdueTasks}</div>
                 <div className="text-xs text-muted-foreground">Overdue</div>
               </div>
             </div>

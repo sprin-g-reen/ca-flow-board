@@ -43,6 +43,7 @@ import {
   LogOut,
   Shield,
   Activity,
+  Clock,
   Cpu,
   HardDrive
 } from "lucide-react";
@@ -66,6 +67,8 @@ const AppHeader = ({ onAIChatToggle }: AppHeaderProps = {}) => {
   const [cpuHistory, setCpuHistory] = useState<number[]>([]);
   const [applicationUptime, setApplicationUptime] = useState<number>(0);
   const [appUptimeHistory, setAppUptimeHistory] = useState<number[]>([]);
+  // Login duration (for employees) - computed from user.lastLogin (fallback to createdAt)
+  const [loginSeconds, setLoginSeconds] = useState<number>(0);
 
   // Track application start time
   useEffect(() => {
@@ -96,6 +99,22 @@ const AppHeader = ({ onAIChatToggle }: AppHeaderProps = {}) => {
 
     return () => clearInterval(interval);
   }, []);
+
+  // Update login duration every second for employees
+  useEffect(() => {
+    if (role !== 'employee' || !user) return;
+
+    const last = user.lastLogin || user.createdAt || null;
+    const start = last ? new Date(last).getTime() : Date.now();
+    // initial value
+    setLoginSeconds(Math.floor((Date.now() - start) / 1000));
+
+    const t = setInterval(() => {
+      setLoginSeconds(Math.floor((Date.now() - start) / 1000));
+    }, 1000);
+
+    return () => clearInterval(t);
+  }, [role, user]);
 
   const handleLogout = () => {
     toast.loading('Signing out...');
@@ -213,46 +232,56 @@ const AppHeader = ({ onAIChatToggle }: AppHeaderProps = {}) => {
           
           {/* Right Section */}
           <div className="flex items-center space-x-2">
-            {/* System Vitals */}
-            <div
-              className="hidden lg:flex items-center space-x-2 px-3 py-1.5 bg-blue-50 rounded-lg border border-blue-200 cursor-pointer hover:bg-blue-100 transition-colors"
-              onClick={() => setShowVitalsModal(true)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => { if (e.key === 'Enter') setShowVitalsModal(true); }}
-              title={`System: ${vitals?.uptime ? Math.floor(vitals.uptime / 3600) + 'h' : 'N/A'} | App: ${applicationUptime ? Math.floor(applicationUptime / 3600) + 'h' : 'N/A'}`}
-            >
-              {vitalsLoading ? (
-                <>
-                  <Activity className="h-4 w-4 text-blue-600 animate-pulse" />
-                  <span className="text-xs font-medium text-blue-700">Loading...</span>
-                </>
-              ) : vitals ? (
-                <>
-                  <div className="flex items-center space-x-1">
-                    <Cpu className="h-3 w-3 text-blue-600" />
-                    <span className="text-xs font-medium text-blue-700">{vitals.cpu?.load || 'N/A'}</span>
-                  </div>
-                  <div className="w-px h-4 bg-blue-300" />
-                  <div className="flex items-center space-x-1">
-                    <HardDrive className="h-3 w-3 text-blue-600" />
-                    <span className="text-xs font-medium text-blue-700">{vitals.memory?.usage || 'N/A'}</span>
-                  </div>
-                  <div className="w-px h-4 bg-blue-300" />
-                  <div className="flex items-center space-x-1">
-                    <Activity className="h-3 w-3 text-green-600" />
-                    <span className="text-xs font-medium text-green-700">
-                      {vitals.uptime ? `${Math.floor(vitals.uptime / 3600)}h` : 'N/A'}
-                    </span>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <Activity className="h-4 w-4 text-red-600" />
-                  <span className="text-xs font-medium text-red-700">Offline</span>
-                </>
-              )}
-            </div>
+            {/* System Vitals - only visible to non-employee roles */}
+            {role !== 'employee' ? (
+              <div
+                className="hidden lg:flex items-center space-x-2 px-3 py-1.5 bg-blue-50 rounded-lg border border-blue-200 cursor-pointer hover:bg-blue-100 transition-colors"
+                onClick={() => setShowVitalsModal(true)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => { if (e.key === 'Enter') setShowVitalsModal(true); }}
+                title={`System: ${vitals?.uptime ? Math.floor(vitals.uptime / 3600) + 'h' : 'N/A'} | App: ${applicationUptime ? Math.floor(applicationUptime / 3600) + 'h' : 'N/A'}`}
+              >
+                {vitalsLoading ? (
+                  <>
+                    <Activity className="h-4 w-4 text-blue-600 animate-pulse" />
+                    <span className="text-xs font-medium text-blue-700">Loading...</span>
+                  </>
+                ) : vitals ? (
+                  <>
+                    <div className="flex items-center space-x-1">
+                      <Cpu className="h-3 w-3 text-blue-600" />
+                      <span className="text-xs font-medium text-blue-700">{vitals.cpu?.load || 'N/A'}</span>
+                    </div>
+                    <div className="w-px h-4 bg-blue-300" />
+                    <div className="flex items-center space-x-1">
+                      <HardDrive className="h-3 w-3 text-blue-600" />
+                      <span className="text-xs font-medium text-blue-700">{vitals.memory?.usage || 'N/A'}</span>
+                    </div>
+                    <div className="w-px h-4 bg-blue-300" />
+                    <div className="flex items-center space-x-1">
+                      <Activity className="h-3 w-3 text-green-600" />
+                      <span className="text-xs font-medium text-green-700">
+                        {vitals.uptime ? `${Math.floor(vitals.uptime / 3600)}h` : 'N/A'}
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <Activity className="h-4 w-4 text-red-600" />
+                    <span className="text-xs font-medium text-red-700">Offline</span>
+                  </>
+                )}
+              </div>
+            ) : (
+              // For employees show a lightweight "Logged in" duration instead of system vitals
+              <div className="hidden lg:flex items-center space-x-2 px-3 py-1.5 bg-gray-50 rounded-lg border border-gray-200" title={`Logged in since: ${user?.lastLogin || user?.createdAt || 'N/A'}`}>
+                <Clock className="h-4 w-4 text-gray-600" />
+                <div className="text-xs font-medium text-gray-700">
+                  Logged in: {loginSeconds ? `${Math.floor(loginSeconds/3600)}h ${Math.floor((loginSeconds%3600)/60)}m` : '0m'}
+                </div>
+              </div>
+            )}
             
             {/* Notifications */}
             <NotificationCenter />

@@ -18,7 +18,7 @@ const invoiceSchema = new mongoose.Schema({
   },
   client: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
+    ref: 'Client', // Changed from 'User' to 'Client' to match Task model
     required: true
   },
   firm: {

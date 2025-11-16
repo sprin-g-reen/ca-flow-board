@@ -62,9 +62,13 @@ export default function TaskDetailModal({ task, open, onOpenChange }: TaskDetail
 
   // Get real client and employee data
   const client = clients?.find(c => c.id === task.clientId);
-  const assignedEmployees = employees?.filter(emp => 
-    task.assignedTo.includes(emp._id)
-  ) || [];
+
+  // Normalize assignedTo which can be an array of string IDs or populated user objects
+  const assignedIds: string[] = Array.isArray(task.assignedTo)
+    ? task.assignedTo.map((a: any) => (typeof a === 'string' ? a : (a._id || a.id))).filter(Boolean)
+    : [];
+
+  const assignedEmployees = employees?.filter(emp => assignedIds.includes(emp._id)) || [];
 
   // Check if task is overdue
   const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== 'completed';

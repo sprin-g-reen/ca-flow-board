@@ -16,7 +16,7 @@ export interface ChatMessage {
     role: string;
   };
   content: string;
-  type: 'text' | 'file' | 'system';
+  type: 'text' | 'file' | 'system' | 'ai';
   attachments?: Array<{
     name: string;
     url: string;
@@ -72,46 +72,65 @@ export const useChat = () => {
   const {
     data: rooms = [],
     isLoading: roomsLoading,
-    refetch: refetchRooms
+    refetch: refetchRooms,
+    error: roomsError
   } = useQuery({
     queryKey: ['chatRooms'],
     queryFn: async () => {
       const token = getValidatedToken();
+      
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
-      const response = await fetch(API_BASE_URL + '/chat/rooms', { headers });
+      
+      const url = API_BASE_URL + '/chat/rooms';
+      
+      const response = await fetch(url, { headers });
       
       if (!response.ok) {
-        throw new Error('Failed to fetch chat rooms');
+        const errorText = await response.text();
+        throw new Error(`Failed to fetch chat rooms: ${response.status}`);
       }
       
-      return response.json();
+      const data = await response.json();
+      return data;
     },
     enabled: !!user,
+    retry: 3,
+    retryDelay: 1000,
   });
 
   // Fetch messages for active room
   const {
     data: messages = [],
     isLoading: messagesLoading,
-    refetch: refetchMessages
+    refetch: refetchMessages,
+    error: messagesError
   } = useQuery({
     queryKey: ['chatMessages', activeRoom],
     queryFn: async () => {
-      if (!activeRoom) return [];
+      if (!activeRoom) {
+        return [];
+      }
       
       const token = getValidatedToken();
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
-      const response = await fetch(`${API_BASE_URL}/chat/rooms/${activeRoom}/messages`, { headers });
+      
+      const url = `${API_BASE_URL}/chat/rooms/${activeRoom}/messages`;
+      
+      const response = await fetch(url, { headers });
       
       if (!response.ok) {
-        throw new Error('Failed to fetch messages');
+        const errorText = await response.text();
+        throw new Error(`Failed to fetch messages: ${response.status}`);
       }
       
-      return response.json();
+      const data = await response.json();
+      return data;
     },
     enabled: !!activeRoom && !!user,
+    retry: 3,
+    retryDelay: 1000,
   });
 
   // Send message mutation
@@ -163,17 +182,24 @@ export const useChat = () => {
       });
       
       if (!response.ok) {
-        throw new Error('Failed to create room');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Failed to create room (${response.status})`);
       }
       
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['chatRooms'] });
-      toast.success('Chat room created successfully');
+      // Only show toast for non-project rooms (project rooms are created silently for tasks)
+      if (variables.type !== 'project') {
+        toast.success('Chat room created successfully');
+      }
     },
-    onError: (error) => {
-      toast.error('Failed to create chat room');
+    onError: (error: any, variables) => {
+      // Only show error toast for non-project rooms
+      if (variables.type !== 'project') {
+        toast.error(error.message || 'Failed to create chat room');
+      }
       console.error('Create room error:', error);
     }
   });
@@ -200,90 +226,41 @@ export const useChat = () => {
     }
   });
 
-  // WebSocket for real-time updates
+  // REST API polling for updates
   useEffect(() => {
-    if (!user) return;
-    let ws: WebSocket | null = null;
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  let reconnectAttempts = 0;
-  const maxReconnectAttempts = 10;
-
-    const backoff = (attempt: number) => Math.min(30000, 1000 * Math.pow(2, attempt)) + Math.floor(Math.random() * 1000);
-
-    const connect = () => {
-      const wsToken = getValidatedToken();
-      const wsUrl = wsToken ? buildWsUrl('chat', wsToken) : buildWsUrl('chat');
-      ws = new WebSocket(wsUrl);
-
-      ws.onopen = () => {
-        console.log('Connected to chat WebSocket');
-        reconnectAttempts = 0;
-        setIsConnected(true);
-        if (reconnectTimer) {
-          clearTimeout(reconnectTimer);
-          reconnectTimer = null;
-        }
-      };
-      
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          
-          switch (data.type) {
-            case 'new_message':
-              queryClient.invalidateQueries({ queryKey: ['chatMessages', data.roomId] });
-              queryClient.invalidateQueries({ queryKey: ['chatRooms'] });
-              break;
-            case 'user_online':
-              setOnlineUsers(prev => [...prev.filter(id => id !== data.userId), data.userId]);
-              break;
-            case 'user_offline':
-              setOnlineUsers(prev => prev.filter(id => id !== data.userId));
-              break;
-            case 'users_online':
-              setOnlineUsers(data.userIds);
-              break;
-          }
-        } catch (error) {
-          console.error('WebSocket message error:', error);
-        }
-      };
-      
-      ws.onclose = (ev) => {
-        console.log('Disconnected from chat WebSocket', ev);
-        setIsConnected(false);
-        if (reconnectAttempts < maxReconnectAttempts) {
-          const timeout = backoff(reconnectAttempts);
-          reconnectAttempts += 1;
-          console.log(`Reconnecting in ${timeout}ms (attempt ${reconnectAttempts})`);
-          reconnectTimer = setTimeout(() => connect(), timeout);
-        } else {
-          console.warn('Max reconnect attempts reached for chat WebSocket');
-          toast.error('Disconnected from chat. Reconnection attempts failed.');
-        }
-      };
-      
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        // Close socket to trigger reconnect logic
-        try { ws?.close(); } catch (e) { /* ignore */ }
-      };
-    };
-
-  connect();
+    if (!user) {
+      return;
+    }
+    
+    setIsConnected(false);
+    
+    // Poll for new messages every 5 seconds
+    const pollInterval = setInterval(() => {
+      if (activeRoom) {
+        queryClient.invalidateQueries({ queryKey: ['chatMessages', activeRoom] });
+      }
+      queryClient.invalidateQueries({ queryKey: ['chatRooms'] });
+    }, 5000);
 
     return () => {
-      if (reconnectTimer) {
-        clearTimeout(reconnectTimer);
-      }
-      try { ws?.close(); } catch (e) { /* ignore */ }
+      clearInterval(pollInterval);
     };
-  }, [user, queryClient, reconnectSignal]);
+  }, [user, queryClient, activeRoom]);
 
+
+  // Async helpers (return promise) so callers can await created room or message
+  const sendMessageAsync = async (roomId: string, content: string, type: 'text' | 'file' = 'text') => {
+    if (!roomId) throw new Error('Room ID required');
+    return sendMessageMutation.mutateAsync({ roomId, content, type } as any);
+  };
 
   const sendMessage = (roomId: string, content: string) => {
     if (!roomId) return;
     sendMessageMutation.mutate({ roomId, content });
+  };
+
+  const createRoomAsync = async (payload: { name: string; type: 'general' | 'project' | 'direct'; participants: string[] }) => {
+    return createRoomMutation.mutateAsync(payload as any);
   };
 
   const createRoom = (name: string, type: 'general' | 'project' | 'direct', participants: string[]) => {
@@ -307,7 +284,9 @@ export const useChat = () => {
     roomsLoading,
     messagesLoading,
     sendMessage,
+  sendMessageAsync,
     createRoom,
+  createRoomAsync,
     markAsRead,
     joinRoom,
     refetchRooms,
@@ -315,7 +294,9 @@ export const useChat = () => {
     isLoading: roomsLoading || messagesLoading,
     isSending: sendMessageMutation.isPending,
     isCreatingRoom: createRoomMutation.isPending,
-    isConnected,
-    reconnect: () => setReconnectSignal(s => s + 1),
+    isConnected: false, // Always false - WebSocket disabled
+    reconnect: () => console.log('WebSocket disabled'),
+    roomsError,
+    messagesError,
   };
 };

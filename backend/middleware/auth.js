@@ -76,8 +76,10 @@ const auth = async (req, res, next) => {
       });
     }
 
-    // Update last login
+    // Update last login and online status
     user.lastLogin = new Date();
+    user.isOnline = true;
+    user.lastSeen = new Date();
     await user.save({ validateBeforeSave: false });
 
     // Grant access to protected route

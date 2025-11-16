@@ -9,6 +9,7 @@ import Invoice from '../models/Invoice.js';
 import User from '../models/User.js';
 import ChatRoom from '../models/ChatRoom.js';
 import ChatMessage from '../models/ChatMessage.js';
+import AIUsage from '../models/AIUsage.js';
 import gstService from '../services/gstService.js';
 import { logChatMessage, logFunctionCall } from '../utils/chatLogger.js';
 
@@ -863,9 +864,27 @@ router.post('/chat', auth, aiLimiter, async (req, res) => {
     });
   }
 
+  const startTime = Date.now();
+  let usageRecord = null;
+
   try {
     const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
     const user = req.user;
+    const firmId = user.firmId._id || user.firmId;
+
+    // Create usage record
+    usageRecord = new AIUsage({
+      user: user._id,
+      firm: firmId,
+      query: prompt,
+      queryType: 'chat',
+      privacy,
+      metadata: {
+        model: GEMINI_MODEL,
+        endpoint: '/api/ai/chat',
+        userAgent: req.headers['user-agent']
+      }
+    });
 
     // Gather user's firm data context
     const dataContext = await gatherUserDataContext(user);
@@ -897,6 +916,15 @@ router.post('/chat', auth, aiLimiter, async (req, res) => {
     const response = await result.response;
     const text = response.text();
 
+    // Calculate response time
+    const responseTime = Date.now() - startTime;
+
+    // Update usage record
+    usageRecord.response = text.substring(0, 500); // Store truncated response
+    usageRecord.responseTime = responseTime;
+    usageRecord.status = 'success';
+    await usageRecord.save();
+
     // Persist history only if privacy is off
     if (!privacy) {
       const room = await ensureAssistantRoom(user);
@@ -911,6 +939,15 @@ router.post('/chat', auth, aiLimiter, async (req, res) => {
     res.json({ response: text });
   } catch (error) {
     console.error('Error with Gemini API:', error);
+    
+    // Log error in usage record
+    if (usageRecord) {
+      usageRecord.status = 'error';
+      usageRecord.errorMessage = error.message;
+      usageRecord.responseTime = Date.now() - startTime;
+      await usageRecord.save().catch(err => console.error('Failed to save error usage record:', err));
+    }
+    
     res.status(500).json({ message: 'Failed to get response from AI' });
   }
 });
@@ -931,6 +968,10 @@ router.post('/chat/stream', auth, aiLimiter, upload.array('attachments'), async 
     });
   }
 
+  const startTime = Date.now();
+  let usageRecord = null;
+  const functionsCalled = [];
+
   try {
     // Initialize model with function calling
     const model = genAI.getGenerativeModel({ 
@@ -938,6 +979,21 @@ router.post('/chat/stream', auth, aiLimiter, upload.array('attachments'), async 
       tools: [{ functionDeclarations }]
     });
     const user = req.user;
+    const firmId = user.firmId._id || user.firmId;
+
+    // Create usage record
+    usageRecord = new AIUsage({
+      user: user._id,
+      firm: firmId,
+      query: prompt,
+      queryType: 'chat',
+      privacy,
+      metadata: {
+        model: GEMINI_MODEL,
+        endpoint: '/api/ai/chat/stream',
+        userAgent: req.headers['user-agent']
+      }
+    });
 
     // Gather user's firm data context
     const dataContext = await gatherUserDataContext(user);
@@ -1017,6 +1073,13 @@ router.post('/chat/stream', auth, aiLimiter, upload.array('attachments'), async 
             response: functionResult
           });
           
+          // Track function call
+          functionsCalled.push({
+            name: fc.name,
+            arguments: fc.args,
+            timestamp: new Date()
+          });
+          
           // Stream a notification to user that function was called
           const notification = `\n\n[🔍 Called function: ${fc.name}]\n\n`;
           res.write(notification);
@@ -1055,6 +1118,14 @@ router.post('/chat/stream', auth, aiLimiter, upload.array('attachments'), async 
 
     res.end();
 
+    // Calculate response time and save usage record
+    const responseTime = Date.now() - startTime;
+    usageRecord.response = fullText.substring(0, 500); // Store truncated response
+    usageRecord.responseTime = responseTime;
+    usageRecord.status = 'success';
+    usageRecord.functionsCalled = functionsCalled;
+    await usageRecord.save();
+
     // Log AI response (encrypted to chatlog.log)
     logChatMessage(user, fullText, 'ai');
 
@@ -1073,6 +1144,16 @@ router.post('/chat/stream', auth, aiLimiter, upload.array('attachments'), async 
 
   } catch (error) {
     console.error('Error with Gemini streaming API:', error);
+    
+    // Log error in usage record
+    if (usageRecord) {
+      usageRecord.status = 'error';
+      usageRecord.errorMessage = error.message;
+      usageRecord.responseTime = Date.now() - startTime;
+      usageRecord.functionsCalled = functionsCalled;
+      await usageRecord.save().catch(err => console.error('Failed to save error usage record:', err));
+    }
+    
     if (!res.headersSent) {
       res.status(500).json({ message: 'Failed to get streaming response from AI' });
     } else {
@@ -1174,6 +1255,367 @@ router.delete('/history', auth, async (req, res) => {
   } catch (err) {
     console.error('Error clearing AI history:', err);
     res.status(500).json({ success: false, message: 'Failed to clear AI history' });
+  }
+});
+
+// @desc    Get AI usage analytics
+// @route   GET /api/ai/analytics
+// @access  Private (Owner/Admin)
+router.get('/analytics', auth, async (req, res) => {
+  try {
+    const { timeRange = '30days', userRole } = req.query;
+    const firmId = req.user.firmId._id || req.user.firmId;
+
+    // Only owners and admins can view analytics
+    if (!['owner', 'superadmin', 'admin'].includes(req.user.role)) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Access denied. Only owners and admins can view AI analytics.' 
+      });
+    }
+
+    // Calculate date range
+    const now = new Date();
+    let startDate = new Date();
+    
+    switch(timeRange) {
+      case '7days':
+        startDate.setDate(now.getDate() - 7);
+        break;
+      case '30days':
+        startDate.setDate(now.getDate() - 30);
+        break;
+      case '90days':
+        startDate.setDate(now.getDate() - 90);
+        break;
+      case 'year':
+        startDate.setFullYear(now.getFullYear() - 1);
+        break;
+      default:
+        startDate.setDate(now.getDate() - 30);
+    }
+
+    // Base query for firm
+    const baseQuery = {
+      firm: firmId,
+      createdAt: { $gte: startDate }
+    };
+
+    // Get all usage data
+    const allUsage = await AIUsage.find(baseQuery)
+      .populate('user', 'fullName email role')
+      .sort({ createdAt: -1 });
+
+    // Calculate statistics
+    const totalQueries = allUsage.length;
+    const successfulQueries = allUsage.filter(u => u.status === 'success').length;
+    const failedQueries = allUsage.filter(u => u.status === 'error').length;
+    const successRate = totalQueries > 0 ? ((successfulQueries / totalQueries) * 100).toFixed(1) : 0;
+
+    // Average response time (only successful queries)
+    const responseTimes = allUsage
+      .filter(u => u.status === 'success' && u.responseTime)
+      .map(u => u.responseTime);
+    const averageResponseTime = responseTimes.length > 0
+      ? (responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length / 1000).toFixed(2)
+      : 0;
+
+    // Top queries (group by query text, take top 10)
+    const queryFrequency = {};
+    allUsage.forEach(usage => {
+      const query = usage.query.substring(0, 100); // Truncate long queries
+      queryFrequency[query] = (queryFrequency[query] || 0) + 1;
+    });
+
+    const topQueries = Object.entries(queryFrequency)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([query, count]) => ({ query, count }));
+
+    // Usage by user role
+    const usageByRole = {};
+    allUsage.forEach(usage => {
+      const role = usage.user?.role || 'unknown';
+      usageByRole[role] = (usageByRole[role] || 0) + 1;
+    });
+
+    const usageByUser = Object.entries(usageByRole).map(([role, queries]) => ({
+      name: role.charAt(0).toUpperCase() + role.slice(1),
+      queries
+    }));
+
+    // Usage over time (daily for last 30 days)
+    const usageOverTime = [];
+    const daysToShow = timeRange === '7days' ? 7 : timeRange === '90days' ? 90 : 30;
+    
+    for (let i = daysToShow - 1; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(now.getDate() - i);
+      date.setHours(0, 0, 0, 0);
+      
+      const nextDate = new Date(date);
+      nextDate.setDate(date.getDate() + 1);
+      
+      const count = allUsage.filter(u => {
+        const createdAt = new Date(u.createdAt);
+        return createdAt >= date && createdAt < nextDate;
+      }).length;
+      
+      usageOverTime.push({
+        date: date.toISOString().split('T')[0],
+        queries: count
+      });
+    }
+
+    // Most active users
+    const userActivity = {};
+    allUsage.forEach(usage => {
+      const userId = usage.user?._id?.toString();
+      const userName = usage.user?.fullName || 'Unknown User';
+      
+      if (userId) {
+        if (!userActivity[userId]) {
+          userActivity[userId] = { name: userName, queries: 0, role: usage.user?.role };
+        }
+        userActivity[userId].queries++;
+      }
+    });
+
+    const topUsers = Object.values(userActivity)
+      .sort((a, b) => b.queries - a.queries)
+      .slice(0, 10);
+
+    // Query types breakdown
+    const queryTypes = {};
+    allUsage.forEach(usage => {
+      const type = usage.queryType || 'chat';
+      queryTypes[type] = (queryTypes[type] || 0) + 1;
+    });
+
+    // Function calls statistics
+    const functionCalls = {};
+    allUsage.forEach(usage => {
+      if (usage.functionsCalled && usage.functionsCalled.length > 0) {
+        usage.functionsCalled.forEach(fn => {
+          functionCalls[fn.name] = (functionCalls[fn.name] || 0) + 1;
+        });
+      }
+    });
+
+    const topFunctions = Object.entries(functionCalls)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([name, count]) => ({ name, count }));
+
+    res.json({
+      success: true,
+      data: {
+        summary: {
+          totalQueries,
+          totalResponses: successfulQueries,
+          failedQueries,
+          successRate: parseFloat(successRate),
+          averageResponseTime: parseFloat(averageResponseTime),
+          timeRange,
+          startDate: startDate.toISOString(),
+          endDate: now.toISOString()
+        },
+        topQueries,
+        usageByUser,
+        usageOverTime,
+        topUsers,
+        queryTypes,
+        topFunctions
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching AI analytics:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch AI analytics',
+      error: error.message
+    });
+  }
+});
+
+// @desc    AI chat response in room context (@AI mentions)
+// @route   POST /api/ai/chat/room
+// @access  Private
+router.post('/chat/room', auth, aiLimiter, async (req, res) => {
+  const { roomId, message, taskId } = req.body;
+
+  if (!message || !roomId) {
+    return res.status(400).json({ 
+      success: false,
+      message: 'Message and roomId are required' 
+    });
+  }
+
+  if (!isConfigured()) {
+    return res.status(503).json({ 
+      success: false,
+      message: 'AI service is not configured. Please set up GEMINI_API_KEY in environment variables.' 
+    });
+  }
+
+  const startTime = Date.now();
+  let usageRecord = null;
+
+  try {
+    const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
+    const user = req.user;
+    const firmId = user.firmId._id || user.firmId;
+
+    // Create usage record
+    usageRecord = new AIUsage({
+      user: user._id,
+      firm: firmId,
+      query: message,
+      queryType: 'chat',
+      privacy: false,
+      metadata: {
+        model: GEMINI_MODEL,
+        endpoint: '/api/ai/chat/room',
+        userAgent: req.headers['user-agent'],
+        roomId,
+        taskId
+      }
+    });
+
+    // Verify user is participant in the room
+    const room = await ChatRoom.findOne({
+      _id: roomId,
+      'participants.user': user._id
+    }).populate('participants.user', 'fullName email role');
+
+    if (!room) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Room not found or you are not a participant' 
+      });
+    }
+
+    // Build context
+    let contextParts = [];
+
+    // 1. System context with firm data
+    const dataContext = await gatherUserDataContext(user);
+    contextParts.push(`SYSTEM CONTEXT:\n${dataContext}`);
+
+    // 2. Room context
+    const roomContext = `\nROOM CONTEXT:\n- Room Name: ${room.name}\n- Room Type: ${room.type}\n- Participants: ${room.participants.map(p => p.user.fullName).join(', ')}`;
+    contextParts.push(roomContext);
+
+    // 3. Task context (if this is a task chat)
+    if (taskId) {
+      const task = await Task.findById(taskId)
+        .populate('assignedTo', 'fullName email')
+        .populate('collaborators', 'fullName email')
+        .populate('client', 'fullName companyName');
+      
+      if (task) {
+        const taskContext = `\nTASK CONTEXT:\n- Title: ${task.title}\n- Status: ${task.status}\n- Priority: ${task.priority}\n- Due Date: ${task.dueDate}\n- Assigned To: ${task.assignedTo?.fullName || 'Unassigned'}\n- Client: ${task.client?.fullName || task.client?.companyName || 'No client'}\n- Description: ${task.description || 'No description'}`;
+        contextParts.push(taskContext);
+      }
+    }
+
+    // 4. Recent chat history (last 30 messages)
+    const recentMessages = await ChatMessage.find({ room: roomId })
+      .sort({ createdAt: -1 })
+      .limit(30)
+      .populate('sender', 'fullName role')
+      .sort({ createdAt: 1 }); // Re-sort chronologically
+
+    if (recentMessages.length > 0) {
+      const chatHistory = recentMessages
+        .map(msg => `${msg.sender.fullName} (${msg.sender.role}): ${msg.content}`)
+        .join('\n');
+      contextParts.push(`\nRECENT CHAT HISTORY:\n${chatHistory}`);
+    }
+
+    // Build Gemini contents
+    let contents = [];
+    
+    // Add context as initial message
+    contents.push({
+      role: 'user',
+      parts: [{ text: contextParts.join('\n\n') }]
+    });
+    
+    contents.push({
+      role: 'model',
+      parts: [{ text: 'I understand. I have full context of the conversation, task details, and firm data. How can I help?' }]
+    });
+
+    // Add user's query
+    contents.push({ 
+      role: 'user', 
+      parts: [{ text: message }] 
+    });
+
+    // Generate response
+    const result = await model.generateContent({ contents });
+    const response = await result.response;
+    const aiResponse = response.text();
+
+    // Calculate response time
+    const responseTime = Date.now() - startTime;
+
+    // Update usage record
+    usageRecord.response = aiResponse.substring(0, 500);
+    usageRecord.responseTime = responseTime;
+    usageRecord.status = 'success';
+    await usageRecord.save();
+
+    // Save AI response as chat message
+    const aiMessage = new ChatMessage({
+      room: roomId,
+      sender: user._id, // AI messages attributed to the user who invoked it
+      content: aiResponse,
+      type: 'ai',
+      readBy: [{ user: user._id, readAt: new Date() }]
+    });
+    await aiMessage.save();
+    await aiMessage.populate('sender', 'fullName email avatar role');
+
+    // Update room's last message
+    room.lastMessage = aiMessage._id;
+    room.updatedAt = new Date();
+    await room.save();
+
+    // Broadcast via WebSocket
+    const chatWS = req.app.get('chatWS');
+    if (chatWS) {
+      chatWS.broadcast({
+        type: 'new_message',
+        roomId,
+        message: aiMessage
+      });
+    }
+
+    res.json({
+      success: true,
+      message: aiMessage,
+      responseTime
+    });
+
+  } catch (error) {
+    console.error('Error with AI room chat:', error);
+    
+    // Log error in usage record
+    if (usageRecord) {
+      usageRecord.status = 'error';
+      usageRecord.errorMessage = error.message;
+      usageRecord.responseTime = Date.now() - startTime;
+      await usageRecord.save().catch(err => console.error('Failed to save error usage record:', err));
+    }
+    
+    res.status(500).json({ 
+      success: false,
+      message: 'Failed to get AI response',
+      error: error.message 
+    });
   }
 });
 

@@ -27,100 +27,27 @@ export const useTaskWebSocket = (enabled: boolean = true) => {
       return;
     }
 
-    try {
-      const token = getValidatedToken();
-      if (!token) {
-        console.warn('⚠️ No auth token available for WebSocket connection');
-        return;
-      }
+    console.log('� Task WebSocket temporarily disabled - using REST polling');
+    
+    // Poll for task updates every 10 seconds as fallback
+    const pollInterval = setInterval(() => {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    }, 10000);
 
-      const wsUrl = `${WS_URL}/ws/tasks?token=${token}`;
-      console.log('🔗 Connecting to task WebSocket:', wsUrl);
-      
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
+    // Store interval ref for cleanup
+    (wsRef as any).pollInterval = pollInterval;
 
-      ws.onopen = () => {
-        console.log('✅ Task WebSocket connected');
-        reconnectAttemptsRef.current = 0;
-        
-        // Start heartbeat
-        const heartbeatInterval = setInterval(() => {
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'ping' }));
-          }
-        }, 30000); // Every 30 seconds
-
-        ws.heartbeatInterval = heartbeatInterval;
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const message: TaskWebSocketMessage = JSON.parse(event.data);
-          console.log('📨 Task WebSocket message received:', message);
-
-          if (message.type === 'task_update') {
-            // Invalidate and refetch tasks query to update UI
-            queryClient.invalidateQueries({ queryKey: ['tasks'] });
-            
-            // Show notification based on action
-            const action = message.action || 'updated';
-            const taskTitle = message.data?.title || 'A task';
-            
-            console.log(`🔄 Task ${action}: ${taskTitle}`);
-            
-            // You can add toast notifications here if desired
-            // toast.info(`Task ${action}: ${taskTitle}`);
-          } else if (message.type === 'connected') {
-            console.log('✅ Task WebSocket connection confirmed:', message.message);
-          } else if (message.type === 'pong') {
-            // Heartbeat response received
-          }
-        } catch (error) {
-          console.error('Error parsing WebSocket message:', error);
-        }
-      };
-
-      ws.onerror = (error) => {
-        console.error('❌ Task WebSocket error:', error);
-      };
-
-      ws.onclose = (event) => {
-        console.log('🔌 Task WebSocket disconnected:', event.code, event.reason);
-        
-        // Clear heartbeat
-        if (ws.heartbeatInterval) {
-          clearInterval(ws.heartbeatInterval);
-        }
-
-        // Attempt to reconnect with exponential backoff
-        if (enabled && reconnectAttemptsRef.current < maxReconnectAttempts) {
-          const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
-          console.log(`🔄 Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current + 1}/${maxReconnectAttempts})`);
-          
-          reconnectTimeoutRef.current = setTimeout(() => {
-            reconnectAttemptsRef.current++;
-            connect();
-          }, delay);
-        } else if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
-          console.error('❌ Max reconnection attempts reached. Please refresh the page.');
-        }
-      };
-    } catch (error) {
-      console.error('Error creating WebSocket connection:', error);
-    }
   }, [enabled, queryClient]);
 
   const disconnect = useCallback(() => {
     if (wsRef.current) {
       console.log('🔌 Closing task WebSocket connection');
       
-      // Clear heartbeat
-      if (wsRef.current.heartbeatInterval) {
-        clearInterval(wsRef.current.heartbeatInterval);
+      // Clear poll interval if exists
+      if ((wsRef as any).pollInterval) {
+        clearInterval((wsRef as any).pollInterval);
       }
       
-      wsRef.current.close();
       wsRef.current = null;
     }
 
@@ -145,7 +72,7 @@ export const useTaskWebSocket = (enabled: boolean = true) => {
   }, [enabled, connect, disconnect]);
 
   return {
-    isConnected: wsRef.current?.readyState === WebSocket.OPEN,
+    isConnected: false,
     disconnect,
     reconnect: connect
   };

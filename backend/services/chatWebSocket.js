@@ -26,13 +26,27 @@ class ChatWebSocketService {
     try {
       // Extract token from query or header
       const token = this.extractToken(req);
+      // Log connection attempt (mask token) for debugging
+      try {
+        const url = req.url || '';
+        const masked = url.replace(/(token=)([^&\s]+)/i, '$1***');
+        console.log('Incoming WS connection:', masked, 'from', req.socket?.remoteAddress || req.headers['x-forwarded-for'] || 'unknown');
+      } catch (e) {
+        // ignore logging errors
+      }
       if (!token) {
         ws.close(1008, 'Token required');
         return;
       }
-
       // Verify token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      let decoded;
+      try {
+        decoded = jwt.verify(token, process.env.JWT_SECRET);
+      } catch (verifyErr) {
+        console.error('WebSocket JWT verify failed:', verifyErr && verifyErr.message ? verifyErr.message : verifyErr);
+        try { ws.close(1008, 'Invalid token'); } catch (e) { /* ignore */ }
+        return;
+      }
       const user = await User.findById(decoded.id).select('fullName email role isActive');
       
       if (!user || !user.isActive) {
@@ -84,7 +98,7 @@ class ChatWebSocketService {
 
     } catch (error) {
       console.error('Connection error:', error);
-      ws.close(1011, 'Server error');
+      try { ws.close(1011, 'Server error'); } catch (e) { /* ignore */ }
     }
   }
 

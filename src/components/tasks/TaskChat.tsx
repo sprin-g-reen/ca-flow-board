@@ -8,90 +8,27 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Task } from '@/store/slices/tasksSlice';
 import { useAuth } from '@/hooks/useAuth';
+import { useChat } from '@/hooks/useChat';
 import { toast } from 'sonner';
 import { format, formatDistanceToNow } from 'date-fns';
+import { getValidatedToken } from '@/lib/auth';
+import { API_BASE_URL } from '@/config/api.config';
+import apiClient from '@/services/api';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface TaskChatProps {
   task: Task;
 }
 
-interface ChatMessage {
-  id: string;
-  content: string;
-  sender: {
-    id: string;
-    name: string;
-    email: string;
-    role: string;
-  };
-  timestamp: string;
-  type: 'message' | 'system';
-  replyTo?: string;
-  edited?: boolean;
-  editedAt?: string;
-}
-
-// Mock chat messages - will be replaced with real API
-const mockMessages: ChatMessage[] = [
-  {
-    id: '1',
-    content: 'Task has been assigned to the team. Please review the requirements and let me know if you have any questions.',
-    sender: {
-      id: '1',
-      name: 'Task Owner',
-      email: 'owner@firm.com',
-      role: 'owner'
-    },
-    timestamp: '2025-03-14T09:00:00Z',
-    type: 'message'
-  },
-  {
-    id: '2',
-    content: 'I\'ve started working on the GST filing. Will need the client\'s purchase invoices for Q4.',
-    sender: {
-      id: '2',
-      name: 'Team Member',
-      email: 'employee@firm.com',
-      role: 'employee'
-    },
-    timestamp: '2025-03-14T10:30:00Z',
-    type: 'message',
-    replyTo: '1'
-  },
-  {
-    id: '3',
-    content: 'Client documents uploaded successfully',
-    sender: {
-      id: 'system',
-      name: 'System',
-      email: '',
-      role: 'system'
-    },
-    timestamp: '2025-03-14T11:15:00Z',
-    type: 'system'
-  },
-  {
-    id: '4',
-    content: 'Perfect! I can see the documents. Will have the filing ready by tomorrow.',
-    sender: {
-      id: '2',
-      name: 'Team Member',
-      email: 'employee@firm.com',
-      role: 'employee'
-    },
-    timestamp: '2025-03-14T11:20:00Z',
-    type: 'message',
-    replyTo: '3'
-  }
-];
-
 export default function TaskChat({ task }: TaskChatProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>(mockMessages);
   const [newMessage, setNewMessage] = useState('');
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
+  const { rooms, messages: chatMessages = [], createRoomAsync, sendMessageAsync, joinRoom, activeRoom } = useChat();
+  const [localRoomId, setLocalRoomId] = useState<string | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -99,34 +36,61 @@ export default function TaskChat({ task }: TaskChatProps) {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [chatMessages]);
 
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !user) return;
 
+    const messageToSend = newMessage;
+    
+    // Clear input immediately for better UX
+    setNewMessage('');
+    setReplyingTo(null);
     setIsTyping(true);
 
     try {
-      // TODO: Implement actual message sending to backend
-      const messageToSend: ChatMessage = {
-        id: Date.now().toString(),
-        content: newMessage.trim(),
-        sender: {
-          id: user.id,
-          name: user.fullName || 'Unknown User',
-          email: user.email,
-          role: user.role
-        },
-        timestamp: new Date().toISOString(),
-        type: 'message',
-        replyTo: replyingTo || undefined
-      };
+      const roomId = localRoomId || activeRoom;
+      if (!roomId) {
+        toast.error('Chat room not ready');
+        setIsTyping(false);
+        return;
+      }
 
-      setMessages(prev => [...prev, messageToSend]);
-      setNewMessage('');
-      setReplyingTo(null);
+      // Send the user's message first
+      await sendMessageAsync(roomId, messageToSend.trim());
+      
+      // Scroll to bottom after sending
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+      
+      // Check if message contains @AI mention
+      if (messageToSend.includes('@AI')) {
+        try {
+          // Extract the query by removing @AI mention
+          const aiQuery = messageToSend.replace('@AI', '').trim();
+          
+          // Call AI endpoint with room context and task ID
+          await apiClient.post('/ai/chat/room', {
+            roomId,
+            message: aiQuery,
+            taskId: task.id // Include task context for AI
+          });
+          
+          // AI response will be automatically received via WebSocket
+          // Scroll again after AI response arrives
+          setTimeout(() => {
+            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+          }, 500);
+        } catch (aiError) {
+          console.error('Error calling AI:', aiError);
+          toast.error('Failed to get AI response');
+        }
+      }
+      
       toast.success('Message sent');
     } catch (error) {
+      console.error('Failed to send task message', error);
       toast.error('Failed to send message');
     } finally {
       setIsTyping(false);
@@ -160,8 +124,96 @@ export default function TaskChat({ task }: TaskChatProps) {
   };
 
   const getReplyToMessage = (replyToId: string) => {
-    return messages.find(msg => msg.id === replyToId);
+    return chatMessages.find((msg: any) => (msg._id || msg.id) === replyToId || (msg.id && msg.id === replyToId));
   };
+
+  // Ensure there's a chat room for this task using task name as room name
+  // AND sync participants with task assignedTo/collaborators
+  useEffect(() => {
+    let isMounted = true;
+    
+    const setupRoom = async () => {
+      try {
+        if (!task) return;
+        const taskId = (task.id || (task as any)._id || '').toString();
+        if (!taskId) return;
+
+        // Use task title as room name (create folder-like organization)
+        const roomName = task.title || `Task ${taskId.slice(-6)}`;
+
+        // Build list of all task participants (assignedTo + collaborators)
+        const assigned = Array.isArray((task as any).assignedTo) ? (task as any).assignedTo : [];
+        const collaborators = Array.isArray((task as any).collaborators) ? (task as any).collaborators : [];
+        const allParticipants = [...assigned, ...collaborators];
+        const participantIds = allParticipants
+          .map((a: any) => (typeof a === 'string' ? a : a._id || a.id))
+          .filter(Boolean)
+          .filter((id, index, self) => self.indexOf(id) === index); // Remove duplicates
+
+        // Try to find existing room in user's rooms by name
+        let room = (rooms || []).find((r: any) => r.name === roomName);
+
+        if (!room) {
+          // Create new room with all participants
+          const created = await createRoomAsync({ 
+            name: roomName, 
+            type: 'project', 
+            participants: participantIds 
+          });
+          room = created;
+        } else {
+          // Room exists - check if we need to add new participants
+          const existingParticipantIds = (room.participants || [])
+            .map((p: any) => p.user?._id || p.user)
+            .filter(Boolean);
+          
+          const newParticipants = participantIds.filter(
+            (id: string) => !existingParticipantIds.includes(id)
+          );
+
+          // Add any new participants to the room
+          if (newParticipants.length > 0) {
+            try {
+              const token = getValidatedToken();
+              await fetch(`${API_BASE_URL}/chat/rooms/${room._id || room.id}/members`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ userIds: newParticipants })
+              });
+              console.log(`✅ Added ${newParticipants.length} new participants to task chat`);
+            } catch (addError) {
+              console.warn('Could not add new participants (might lack permissions):', addError);
+              // Continue anyway - user can still use chat even if they can't add others
+            }
+          }
+        }
+
+        if (!isMounted) return;
+
+        const rid = room._id || room.id;
+        if (rid && rid !== localRoomId) {
+          setLocalRoomId(rid);
+          joinRoom(rid);
+        }
+      } catch (err) {
+        console.error('Failed to setup task chat room', err);
+      }
+    };
+
+    setupRoom();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    task?.id || (task as any)?._id, 
+    task?.title,
+    JSON.stringify((task as any)?.assignedTo || []),
+    JSON.stringify((task as any)?.collaborators || [])
+  ]); // Re-run when task ID, title, or participants change
 
   return (
     <div className="h-full flex flex-col">
@@ -169,80 +221,113 @@ export default function TaskChat({ task }: TaskChatProps) {
       <div className="p-4 border-b bg-gray-50">
         <div className="flex items-center gap-3">
           <MessageSquare className="h-5 w-5 text-blue-600" />
-          <div>
-            <h3 className="font-medium text-gray-900">Task Discussion</h3>
-            <p className="text-sm text-gray-600">
-              {messages.filter(m => m.type === 'message').length} messages • Last activity {
-                messages.length > 0 
-                  ? formatDistanceToNow(new Date(messages[messages.length - 1].timestamp), { addSuffix: true })
-                  : 'No activity'
-              }
-            </p>
-          </div>
+            <div>
+              <h3 className="font-medium text-gray-900">Task Discussion</h3>
+              <p className="text-sm text-gray-600">
+                {chatMessages.filter((m: any) => (m.type || 'text') === 'message' || (m.type || 'text') === 'text').length} messages • Last activity {
+                  chatMessages.length > 0 
+                    ? formatDistanceToNow(new Date((chatMessages[chatMessages.length - 1].createdAt || chatMessages[chatMessages.length - 1].timestamp)), { addSuffix: true })
+                    : 'No activity'
+                }
+              </p>
+            </div>
         </div>
       </div>
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.length === 0 ? (
+  {chatMessages.length === 0 ? (
           <div className="text-center py-8">
             <MessageSquare className="h-12 w-12 text-gray-400 mx-auto mb-4" />
             <p className="text-gray-500">No messages yet</p>
             <p className="text-sm text-gray-400">Start the conversation about this task</p>
           </div>
-        ) : (
-          messages.map((message) => (
-            <div key={message.id} className="space-y-2">
+          ) : (
+          chatMessages.map((message: any) => {
+            const isAIMessage = message.type === 'ai';
+            return (
+            <div key={message._id || message.id} className="space-y-2">
               {message.type === 'system' ? (
                 <div className="flex justify-center">
                   <div className="bg-gray-100 text-gray-600 text-xs px-3 py-1 rounded-full">
                     <Clock className="h-3 w-3 inline mr-1" />
-                    {message.content} • {format(new Date(message.timestamp), 'MMM dd, HH:mm')}
+                    {message.content} • {format(new Date(message.createdAt || message.timestamp), 'MMM dd, HH:mm')}
                   </div>
                 </div>
               ) : (
-                <div className={`flex gap-3 ${message.sender.id === user?.id ? 'flex-row-reverse' : ''}`}>
+                <div className={`flex gap-3 ${
+                  isAIMessage ? '' : ((message.sender?._id || message.sender?.id) === user?.id ? 'flex-row-reverse' : '')
+                } ${isAIMessage ? 'bg-blue-50 dark:bg-blue-950/20 p-3 rounded-lg border-l-4 border-blue-500' : ''}`}>
                   <Avatar className="h-8 w-8 flex-shrink-0">
-                    <AvatarFallback className="bg-blue-500 text-white text-sm">
-                      {message.sender.name
-                        .split(' ')
-                        .map(n => n[0])
-                        .join('')
-                        .toUpperCase()
-                        .slice(0, 2)
-                      }
-                    </AvatarFallback>
+                    {isAIMessage ? (
+                      <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-sm">
+                        🤖
+                      </AvatarFallback>
+                    ) : (
+                      <AvatarFallback className="bg-blue-500 text-white text-sm">
+                        {(message.sender?.fullName || message.sender?.name || '')
+                          .split(' ')
+                          .map((n: string) => n[0])
+                          .join('')
+                          .toUpperCase()
+                          .slice(0, 2)
+                        }
+                      </AvatarFallback>
+                    )}
                   </Avatar>
                   
-                  <div className={`flex-1 max-w-lg ${message.sender.id === user?.id ? 'text-right' : ''}`}>
+                  <div className={`flex-1 max-w-lg ${((message.sender?._id || message.sender?.id) === user?.id) ? 'text-right' : ''}`}>
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-sm font-medium text-gray-900">
-                        {message.sender.name}
+                      <span className={`text-sm font-medium ${isAIMessage ? 'text-blue-700 dark:text-blue-400' : 'text-gray-900'}`}>
+                        {isAIMessage ? 'AI Assistant' : (message.sender?.fullName || message.sender?.name || 'Unknown')}
                       </span>
-                      <Badge className={getRoleColor(message.sender.role)} variant="secondary">
-                        {message.sender.role}
-                      </Badge>
+                      {!isAIMessage && (
+                        <Badge className={getRoleColor(message.sender?.role || '')} variant="secondary">
+                          {message.sender?.role || 'member'}
+                        </Badge>
+                      )}
                       <span className="text-xs text-gray-500">
-                        {format(new Date(message.timestamp), 'MMM dd, HH:mm')}
+                        {format(new Date(message.createdAt || message.timestamp), 'MMM dd, HH:mm')}
                       </span>
                     </div>
                     
                     {message.replyTo && (
                       <div className="text-xs text-gray-500 mb-2 p-2 bg-gray-50 rounded border-l-2 border-gray-300">
                         <Reply className="h-3 w-3 inline mr-1" />
-                        Replying to: {getReplyToMessage(message.replyTo)?.content.slice(0, 50)}...
+                        Replying to: {getReplyToMessage((message.replyTo && (message.replyTo._id || message.replyTo)) || message.replyTo)?.content?.slice(0, 50) || '…'}
                       </div>
                     )}
                     
                     <div className={`p-3 rounded-lg ${
-                      message.sender.id === user?.id 
-                        ? 'bg-blue-500 text-white' 
-                        : 'bg-gray-100 text-gray-900'
+                      isAIMessage 
+                        ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100' 
+                        : ((message.sender?._id || message.sender?.id) === user?.id) 
+                          ? 'bg-blue-500 text-white' 
+                          : 'bg-gray-100 text-gray-900'
                     }`}>
-                      <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                      {isAIMessage ? (
+                        <div className="prose prose-sm max-w-none dark:prose-invert">
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                              p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                              strong: ({ children }) => <strong className="font-semibold text-blue-700 dark:text-blue-300">{children}</strong>,
+                              ul: ({ children }) => <ul className="list-disc list-inside space-y-1 my-2">{children}</ul>,
+                              ol: ({ children }) => <ol className="list-decimal list-inside space-y-1 my-2">{children}</ol>,
+                              li: ({ children }) => <li className="ml-2">{children}</li>,
+                              code: ({ children }) => <code className="bg-gray-200 dark:bg-gray-700 px-1 py-0.5 rounded text-sm">{children}</code>,
+                              pre: ({ children }) => <pre className="bg-gray-100 dark:bg-gray-800 p-2 rounded my-2 overflow-x-auto">{children}</pre>,
+                            }}
+                          >
+                            {message.content}
+                          </ReactMarkdown>
+                        </div>
+                      ) : (
+                        <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                      )}
                       {message.edited && (
                         <p className="text-xs opacity-75 mt-1">
-                          Edited {formatDistanceToNow(new Date(message.editedAt!), { addSuffix: true })}
+                          Edited {formatDistanceToNow(new Date(message.editedAt || message.updatedAt), { addSuffix: true })}
                         </p>
                       )}
                     </div>
@@ -251,7 +336,7 @@ export default function TaskChat({ task }: TaskChatProps) {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleReply(message.id)}
+                        onClick={() => handleReply(message._id || message.id)}
                         className="text-xs h-6 px-2"
                       >
                         <Reply className="h-3 w-3 mr-1" />
@@ -262,7 +347,8 @@ export default function TaskChat({ task }: TaskChatProps) {
                 </div>
               )}
             </div>
-          ))
+            );
+          })
         )}
         <div ref={messagesEndRef} />
       </div>

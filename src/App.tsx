@@ -41,6 +41,7 @@ import EmployeeDashboard from './pages/employee/EmployeeDashboard';
 import EmployeeTasks from './pages/employee/EmployeeTasks';
 import EmployeeClients from './pages/employee/EmployeeClients';
 import EmployeeChat from './pages/employee/EmployeeChat';
+import EmployeeProfile from './pages/employee/EmployeeProfile';
 
 // Client routes
 import ClientDashboard from './pages/client/ClientDashboard';
@@ -107,6 +108,8 @@ const App = () => (
                 <Route path="tasks" element={<EmployeeTasks />} />
                 <Route path="clients" element={<EmployeeClients />} />
                 <Route path="chat" element={<EmployeeChat />} />
+                <Route path="profile" element={<EmployeeProfile />} />
+                <Route path="settings" element={<EmployeeProfile />} />
               </Route>
               
               {/* Client routes */}

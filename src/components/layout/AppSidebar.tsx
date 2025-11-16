@@ -12,6 +12,7 @@ import {
   Settings, 
   Trash2,
   Users,
+  User,
   ChevronDown,
   ChevronRight,
   FileBarChart
@@ -178,6 +179,8 @@ const employeeLinks = [
   { to: '/employee/tasks', icon: <ClipboardCheck className="h-5 w-5" />, label: 'My Tasks' },
   { to: '/employee/clients', icon: <Users className="h-5 w-5" />, label: 'Clients' },
   { to: '/employee/chat', icon: <MessageSquare className="h-5 w-5" />, label: 'Messages' },
+  { to: '/employee/profile', icon: <User className="h-5 w-5" />, label: 'Profile' },
+  { to: '/employee/settings', icon: <Settings className="h-5 w-5" />, label: 'Settings' },
 ];
 
 const clientLinks = [

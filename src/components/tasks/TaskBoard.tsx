@@ -375,31 +375,22 @@ const TaskBoard = ({ tasks, basePath }: TaskBoardProps) => {
           {/* Real-time Status Indicator */}
           <div className="flex items-center gap-2">
             <Badge 
-              variant={isRealTime && wsConnected ? "default" : "secondary"} 
+              variant={isRealTime ? "default" : "secondary"} 
               className={`flex items-center gap-1 ${
-                isRealTime && wsConnected
+                isRealTime
                   ? 'bg-green-100 text-green-800 hover:bg-green-200' 
-                  : isRealTime && !wsConnected
-                  ? 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
               title={
-                isRealTime && wsConnected 
-                  ? 'Real-time updates active (WebSocket connected)' 
-                  : isRealTime && !wsConnected 
-                  ? 'Connecting to real-time updates...'
+                isRealTime 
+                  ? 'Real-time updates active (10-second polling)' 
                   : 'Real-time updates disabled'
               }
             >
-              {isRealTime && wsConnected ? (
+              {isRealTime ? (
                 <>
                   <Wifi className="h-3 w-3" />
-                  Live
-                </>
-              ) : isRealTime && !wsConnected ? (
-                <>
-                  <RefreshCw className="h-3 w-3 animate-spin" />
-                  Connecting
+                  Ready
                 </>
               ) : (
                 <>

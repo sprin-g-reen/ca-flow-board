@@ -17,7 +17,7 @@ const chatMessageSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['text', 'file', 'system'],
+    enum: ['text', 'file', 'system', 'ai'],
     default: 'text'
   },
   attachments: [{

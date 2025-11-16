@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import { useChat, ChatRoom, ChatMessage } from '@/hooks/useChat';
 import { useSelector } from 'react-redux';
 import { RootState } from '@/store';
+import { useQueryClient } from '@tanstack/react-query';
+import { useEmployees } from '@/hooks/useEmployees';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -15,6 +17,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import apiClient from '@/services/api';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { 
   MessageCircle, 
   Send, 
@@ -29,7 +33,8 @@ import {
   Settings,
   X,
   Mail,
-  CheckCircle
+  CheckCircle,
+  Trash2
 } from 'lucide-react';
 import { RefreshCw } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
@@ -56,6 +61,9 @@ export const ChatSidebar = ({ isOpen, onToggle }: ChatSidebarProps) => {
   
   const user = useSelector((state: RootState) => state.auth.user);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { employees = [] } = useEmployees();
+  const users = employees; // Use employees from the hook
   const [messageText, setMessageText] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateRoom, setShowCreateRoom] = useState(false);
@@ -70,9 +78,12 @@ export const ChatSidebar = ({ isOpen, onToggle }: ChatSidebarProps) => {
   const [memberSearchQuery, setMemberSearchQuery] = useState('');
   const [teamSearchQuery, setTeamSearchQuery] = useState('');
   const [clientSearchQuery, setClientSearchQuery] = useState('');
-  const [users, setUsers] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const [showAutocomplete, setShowAutocomplete] = useState(false);
+  const [autocompleteType, setAutocompleteType] = useState<'mention' | 'task' | 'client' | null>(null);
+  const [autocompleteFilter, setAutocompleteFilter] = useState('');
+  const [cursorPosition, setCursorPosition] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -97,27 +108,20 @@ export const ChatSidebar = ({ isOpen, onToggle }: ChatSidebarProps) => {
     return () => clearTimeout(timer);
   }, [messages, activeRoom]);
 
-  // Load users and clients
+  // Load clients
   useEffect(() => {
-    loadUsers();
     if (user?.role === 'owner' || user?.role === 'admin') {
       loadClients();
     }
   }, []);
 
-  const loadUsers = async () => {
-    try {
-      const response = await apiClient.get('/users');
-      setUsers((response as any).data.data || []);
-    } catch (error) {
-      console.error('Error loading users:', error);
-    }
-  };
-
   const loadClients = async () => {
     try {
       const response = await apiClient.get('/clients');
-      setClients((response as any).data.data || []);
+      // API might return { success, data: { clients: [] } } or { success, data: [] }
+      const clientsData = (response as any).data?.data?.clients || (response as any).data?.clients || (response as any).data?.data || [];
+      console.log('📋 Loaded clients for chat:', clientsData.length);
+      setClients(clientsData);
     } catch (error) {
       console.error('Error loading clients:', error);
     }
@@ -176,15 +180,43 @@ export const ChatSidebar = ({ isOpen, onToggle }: ChatSidebarProps) => {
     }
   };
 
-  const handleAddMembers = () => {
+  const handleAddMembers = async () => {
     if (selectedUsers.length === 0) return;
+    if (!activeRoom) return;
     
-    toast({
-      title: "Members Added",
-      description: `${selectedUsers.length} member(s) added to the room.`,
-    });
-    setSelectedUsers([]);
-    setShowAddMembers(false);
+    // Check if user has permission to add members
+    if (user?.role === 'employee' || user?.role === 'client') {
+      toast({
+        title: "Permission Denied",
+        description: "Only administrators can add members to rooms.",
+        variant: "destructive"
+      });
+      setShowAddMembers(false);
+      return;
+    }
+    
+    try {
+      await apiClient.post(`/chat/rooms/${activeRoom}/members`, {
+        userIds: selectedUsers
+      });
+      
+      // Refresh the room data to show new members
+      queryClient.invalidateQueries({ queryKey: ['chatRooms'] });
+      
+      toast({
+        title: "Members Added",
+        description: `${selectedUsers.length} member(s) added to the room.`,
+      });
+      setSelectedUsers([]);
+      setShowAddMembers(false);
+    } catch (error: any) {
+      console.error('Error adding members:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to add members",
+        variant: "destructive"
+      });
+    }
   };
 
   const toggleUserSelection = (userId: string) => {
@@ -201,12 +233,172 @@ export const ChatSidebar = ({ isOpen, onToggle }: ChatSidebarProps) => {
     msg.sender.fullName.toLowerCase().includes(chatSearchQuery.toLowerCase())
   );
 
-  const handleSendMessage = (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!messageText.trim() || !activeRoom) return;
     
-    sendMessage(activeRoom, messageText);
+    const messageToSend = messageText;
+    
+    // Clear input immediately for better UX
     setMessageText('');
+    setShowAutocomplete(false);
+    
+    // Send the user's message first
+    sendMessage(activeRoom, messageToSend);
+    
+    // Scroll to bottom after sending
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+    
+    // Check if message contains @AI mention
+    if (messageToSend.includes('@AI')) {
+      try {
+        // Extract the query by removing @AI mention
+        const aiQuery = messageToSend.replace('@AI', '').trim();
+        
+        console.log('🤖 Calling AI with query:', aiQuery);
+        
+        // Call AI endpoint with room context
+        const response: any = await apiClient.post('/ai/chat/room', {
+          roomId: activeRoom,
+          message: aiQuery
+        });
+        
+        console.log('✅ AI response:', response.data);
+        
+        // AI response will be automatically received via WebSocket
+        // Scroll again after AI response arrives
+        setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }, 500);
+      } catch (error: any) {
+        console.error('❌ Error calling AI:', error);
+        console.error('❌ Error response:', error.response?.data);
+        toast({
+          title: "AI Error",
+          description: error.response?.data?.message || "Failed to get AI response. Please try again.",
+          variant: "destructive"
+        });
+      }
+    }
+  };
+
+  const handleMessageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    const cursorPos = e.target.selectionStart || 0;
+    
+    setMessageText(value);
+    setCursorPosition(cursorPos);
+
+    // Check for autocomplete triggers
+    const textBeforeCursor = value.substring(0, cursorPos);
+    const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+    const lastHashIndex = textBeforeCursor.lastIndexOf('#');
+    
+    // Check for @mention
+    if (lastAtIndex > -1 && (lastAtIndex === 0 || /\s/.test(textBeforeCursor[lastAtIndex - 1]))) {
+      const afterAt = textBeforeCursor.substring(lastAtIndex + 1);
+      if (!/\s/.test(afterAt)) {
+        setAutocompleteType('mention');
+        setAutocompleteFilter(afterAt);
+        setShowAutocomplete(true);
+        return;
+      }
+    }
+    
+    // Check for #TASK- or #CLIENT-
+    if (lastHashIndex > -1 && (lastHashIndex === 0 || /\s/.test(textBeforeCursor[lastHashIndex - 1]))) {
+      const afterHash = textBeforeCursor.substring(lastHashIndex + 1);
+      if (!/\s/.test(afterHash)) {
+        if (afterHash.toUpperCase().startsWith('TASK')) {
+          setAutocompleteType('task');
+          setAutocompleteFilter(afterHash.substring(4).replace(/^-/, ''));
+          setShowAutocomplete(true);
+          return;
+        } else if (afterHash.toUpperCase().startsWith('CLIENT')) {
+          setAutocompleteType('client');
+          setAutocompleteFilter(afterHash.substring(6).replace(/^-/, ''));
+          setShowAutocomplete(true);
+          return;
+        }
+      }
+    }
+    
+    setShowAutocomplete(false);
+  };
+
+  const handleAutocompleteSelect = (item: any) => {
+    const textBeforeCursor = messageText.substring(0, cursorPosition);
+    const textAfterCursor = messageText.substring(cursorPosition);
+    
+    let newText = '';
+    if (autocompleteType === 'mention') {
+      const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+      newText = textBeforeCursor.substring(0, lastAtIndex) + `@${item.username || item.fullName} ` + textAfterCursor;
+    } else if (autocompleteType === 'task') {
+      const lastHashIndex = textBeforeCursor.lastIndexOf('#');
+      newText = textBeforeCursor.substring(0, lastHashIndex) + `#TASK-${item._id} ` + textAfterCursor;
+    } else if (autocompleteType === 'client') {
+      const lastHashIndex = textBeforeCursor.lastIndexOf('#');
+      newText = textBeforeCursor.substring(0, lastHashIndex) + `#CLIENT-${item._id} ` + textAfterCursor;
+    }
+    
+    setMessageText(newText);
+    setShowAutocomplete(false);
+    inputRef.current?.focus();
+  };
+
+  const handleClearMessages = async () => {
+    if (!activeRoom || !activeRoomData) return;
+    
+    if (!confirm('Are you sure you want to clear all messages in this room? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      await apiClient.delete(`/chat/rooms/${activeRoom}/messages`);
+      queryClient.invalidateQueries({ queryKey: ['chatMessages', activeRoom] });
+      toast({
+        title: "Messages Cleared",
+        description: "All messages have been deleted from this room.",
+      });
+      setShowInfoModal(false);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to clear messages",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDeleteRoom = async () => {
+    if (!activeRoom || !activeRoomData) return;
+    
+    if (!confirm(`Are you sure you want to delete "${activeRoomData.name}"? All messages will be permanently deleted. This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      await apiClient.delete(`/chat/rooms/${activeRoom}`);
+      queryClient.invalidateQueries({ queryKey: ['chatRooms'] });
+      toast({
+        title: "Room Deleted",
+        description: "The chat room has been permanently deleted.",
+      });
+      setShowInfoModal(false);
+      // Clear active room since it's been deleted
+      if (rooms.length > 1) {
+        joinRoom(rooms[0]._id);
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete room",
+        variant: "destructive"
+      });
+    }
   };
 
   const getInitials = (name: string) => {
@@ -215,6 +407,119 @@ export const ChatSidebar = ({ isOpen, onToggle }: ChatSidebarProps) => {
 
   const isUserOnline = (userId: string) => {
     return onlineUsers.includes(userId);
+  };
+
+  // Parse message content for @mentions and links
+  const renderMessageContent = (content: string, isAI: boolean = false) => {
+    // If it's an AI message, render as markdown
+    if (isAI) {
+      return (
+        <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-1">
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              // Custom styling for markdown elements
+              p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+              strong: ({ children }) => <strong className="font-semibold text-blue-700 dark:text-blue-300">{children}</strong>,
+              ul: ({ children }) => <ul className="list-disc list-inside space-y-1 my-2">{children}</ul>,
+              ol: ({ children }) => <ol className="list-decimal list-inside space-y-1 my-2">{children}</ol>,
+              li: ({ children }) => <li className="ml-2">{children}</li>,
+              code: ({ children }) => <code className="bg-gray-200 dark:bg-gray-700 px-1 py-0.5 rounded text-sm">{children}</code>,
+              pre: ({ children }) => <pre className="bg-gray-100 dark:bg-gray-800 p-2 rounded my-2 overflow-x-auto">{children}</pre>,
+            }}
+          >
+            {content}
+          </ReactMarkdown>
+        </div>
+      );
+    }
+    
+    // For regular messages, keep the existing mention/link parsing
+    const parts: JSX.Element[] = [];
+    let lastIndex = 0;
+    
+    // Regex patterns for mentions, task links, and client links
+    const mentionRegex = /@(\w+)/g;
+    const taskLinkRegex = /#TASK-(\w+)/gi;
+    const clientLinkRegex = /#CLIENT-(\w+)/gi;
+    
+    // Find all matches
+    const allMatches: Array<{ index: number; length: number; type: string; match: RegExpExecArray }> = [];
+    
+    let match;
+    while ((match = mentionRegex.exec(content)) !== null) {
+      allMatches.push({ index: match.index, length: match[0].length, type: 'mention', match });
+    }
+    while ((match = taskLinkRegex.exec(content)) !== null) {
+      allMatches.push({ index: match.index, length: match[0].length, type: 'task', match });
+    }
+    while ((match = clientLinkRegex.exec(content)) !== null) {
+      allMatches.push({ index: match.index, length: match[0].length, type: 'client', match });
+    }
+    
+    // Sort by index
+    allMatches.sort((a, b) => a.index - b.index);
+    
+    // Build JSX with styled mentions and links
+    allMatches.forEach((item, i) => {
+      // Add text before this match
+      if (item.index > lastIndex) {
+        parts.push(<span key={`text-${i}`}>{content.substring(lastIndex, item.index)}</span>);
+      }
+      
+      // Add the match with styling
+      if (item.type === 'mention') {
+        const username = item.match[1];
+        parts.push(
+          <span 
+            key={`mention-${i}`} 
+            className="bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 px-1 rounded font-medium cursor-pointer hover:bg-blue-200 dark:hover:bg-blue-800"
+            title={`@${username}`}
+          >
+            @{username}
+          </span>
+        );
+      } else if (item.type === 'task') {
+        const taskId = item.match[1];
+        parts.push(
+          <a 
+            key={`task-${i}`} 
+            href={`#/tasks/${taskId}`}
+            className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 px-1 rounded font-medium hover:underline"
+            onClick={(e) => {
+              e.preventDefault();
+              window.location.hash = `/tasks/${taskId}`;
+            }}
+          >
+            #TASK-{taskId}
+          </a>
+        );
+      } else if (item.type === 'client') {
+        const clientId = item.match[1];
+        parts.push(
+          <a 
+            key={`client-${i}`} 
+            href={`#/clients/${clientId}`}
+            className="bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 px-1 rounded font-medium hover:underline"
+            onClick={(e) => {
+              e.preventDefault();
+              window.location.hash = `/clients/${clientId}`;
+            }}
+          >
+            #CLIENT-{clientId}
+          </a>
+        );
+      }
+      
+      lastIndex = item.index + item.length;
+    });
+    
+    // Add remaining text
+    if (lastIndex < content.length) {
+      parts.push(<span key="text-end">{content.substring(lastIndex)}</span>);
+    }
+    
+    return parts.length > 0 ? <>{parts}</> : <>{content}</>;
   };
 
   if (!isOpen) {
@@ -246,10 +551,14 @@ export const ChatSidebar = ({ isOpen, onToggle }: ChatSidebarProps) => {
         <div className="flex items-center gap-2">
           {/* Connection indicator */}
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-background border">
-            <Circle className={`h-2 w-2 ${isConnected ? 'fill-green-500 text-green-500 animate-pulse' : 'fill-red-400 text-red-400'}`} />
-            <span className="text-xs font-medium">{isConnected ? 'Connected' : 'Disconnected'}</span>
+            <Circle className="h-2 w-2 fill-green-500 text-green-500 animate-pulse" />
+            <span className="text-xs font-medium">Connected</span>
           </div>
-          <Button variant="outline" size="icon" onClick={() => reconnect()} title="Reconnect" className="h-9 w-9">
+          <Button variant="outline" size="icon" onClick={() => {
+            queryClient.invalidateQueries({ queryKey: ['chatRooms'] });
+            queryClient.invalidateQueries({ queryKey: ['chatMessages'] });
+            toast({ title: "Refreshed", description: "Chat data refreshed" });
+          }} title="Refresh Now" className="h-9 w-9">
             <RefreshCw className="h-4 w-4" />
           </Button>
           <Dialog open={showCreateRoom} onOpenChange={setShowCreateRoom}>
@@ -328,14 +637,17 @@ export const ChatSidebar = ({ isOpen, onToggle }: ChatSidebarProps) => {
                 className="pl-9 h-10"
               />
             </div>
-            <Button 
-              variant="outline" 
-              className="w-full mt-2"
-              onClick={() => setShowDMDialog(true)}
-            >
-              <MessageCircle className="h-4 w-4 mr-2" />
-              New Direct Message
-            </Button>
+            {/* Only show New Direct Message button for admins */}
+            {user?.role && ['owner', 'superadmin', 'admin'].includes(user.role) && (
+              <Button 
+                variant="outline" 
+                className="w-full mt-2"
+                onClick={() => setShowDMDialog(true)}
+              >
+                <MessageCircle className="h-4 w-4 mr-2" />
+                New Direct Message
+              </Button>
+            )}
           </div>
 
           {/* Rooms */}
@@ -437,15 +749,18 @@ export const ChatSidebar = ({ isOpen, onToggle }: ChatSidebarProps) => {
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-9 w-9"
-                    onClick={() => setShowAddMembers(true)}
-                    title="Add Members"
-                  >
-                    <UserPlus className="h-4 w-4" />
-                  </Button>
+                  {/* Only show Add Members button for admins */}
+                  {user?.role && ['owner', 'superadmin', 'admin'].includes(user.role) && (
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-9 w-9"
+                      onClick={() => setShowAddMembers(true)}
+                      title="Add Members"
+                    >
+                      <UserPlus className="h-4 w-4" />
+                    </Button>
+                  )}
                   <Button 
                     variant="ghost" 
                     size="icon" 
@@ -477,28 +792,53 @@ export const ChatSidebar = ({ isOpen, onToggle }: ChatSidebarProps) => {
                       <p className="text-xs mt-1">Start the conversation!</p>
                     </div>
                   ) : (
-                    messages.map((message: ChatMessage) => (
-                      <div key={message._id} className="flex gap-3 hover:bg-muted/50 -mx-2 px-2 py-2 rounded-lg transition-colors">
-                        <Avatar className="h-10 w-10 mt-0.5">
-                          <AvatarImage src={message.sender.avatar} />
-                          <AvatarFallback>
-                            {getInitials(message.sender.fullName)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="font-semibold text-sm">{message.sender.fullName}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {formatDistanceToNow(new Date(message.createdAt), { addSuffix: true })}
-                            </span>
-                            {message.edited && (
-                              <span className="text-xs text-muted-foreground italic">(edited)</span>
+                    messages.map((message: ChatMessage) => {
+                      const isAIMessage = message.type === 'ai';
+                      const isOwnMessage = message.sender._id === user?.id;
+                      const shouldAlignRight = isOwnMessage && !isAIMessage;
+                      
+                      return (
+                        <div 
+                          key={message._id} 
+                          className={`flex gap-3 -mx-2 px-2 py-2 rounded-lg transition-colors ${
+                            shouldAlignRight ? 'flex-row-reverse' : ''
+                          } ${
+                            isAIMessage ? 'bg-blue-50 dark:bg-blue-950/20 border-l-4 border-blue-500' : 'hover:bg-muted/50'
+                          }`}
+                        >
+                          <Avatar className="h-10 w-10 mt-0.5">
+                            {isAIMessage ? (
+                              <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white">
+                                🤖
+                              </AvatarFallback>
+                            ) : (
+                              <>
+                                <AvatarImage src={message.sender.avatar} />
+                                <AvatarFallback>
+                                  {getInitials(message.sender.fullName)}
+                                </AvatarFallback>
+                              </>
                             )}
+                          </Avatar>
+                          <div className={`flex-1 min-w-0 ${shouldAlignRight ? 'text-right' : ''}`}>
+                            <div className={`flex items-center gap-2 mb-1 ${shouldAlignRight ? 'flex-row-reverse' : ''}`}>
+                              <span className={`font-semibold text-sm ${isAIMessage ? 'text-blue-700 dark:text-blue-400' : ''}`}>
+                                {isAIMessage ? 'AI Assistant' : message.sender.fullName}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {formatDistanceToNow(new Date(message.createdAt), { addSuffix: true })}
+                              </span>
+                              {message.edited && (
+                                <span className="text-xs text-muted-foreground italic">(edited)</span>
+                              )}
+                            </div>
+                            <div className={`text-sm ${isAIMessage ? 'text-gray-800 dark:text-gray-200' : 'whitespace-pre-wrap'} leading-relaxed`}>
+                              {renderMessageContent(message.content, isAIMessage)}
+                            </div>
                           </div>
-                          <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
                         </div>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                   <div ref={messagesEndRef} />
                 </div>
@@ -507,14 +847,97 @@ export const ChatSidebar = ({ isOpen, onToggle }: ChatSidebarProps) => {
               {/* Message Input */}
               <div className="p-4 border-t bg-muted/20">
                 <form onSubmit={handleSendMessage} className="flex gap-3">
-                  <Input
-                    ref={inputRef}
-                    placeholder={`Message #${activeRoomData.name}`}
-                    value={messageText}
-                    onChange={(e) => setMessageText(e.target.value)}
-                    className="flex-1 h-11"
-                    disabled={isSending}
-                  />
+                  <div className="flex-1 relative">
+                    {/* Autocomplete Dropdown */}
+                    {showAutocomplete && (
+                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-background border rounded-lg shadow-lg max-h-60 overflow-y-auto z-50">
+                        {autocompleteType === 'mention' && (
+                          <div className="p-2">
+                            <div className="text-xs text-muted-foreground px-2 py-1 font-medium">Mention Team Member</div>
+                            {users
+                              .filter(u => {
+                                const searchTerm = autocompleteFilter.toLowerCase();
+                                return (
+                                  u.fullName?.toLowerCase().includes(searchTerm) ||
+                                  u.username?.toLowerCase().includes(searchTerm) ||
+                                  u.email?.toLowerCase().includes(searchTerm)
+                                );
+                              })
+                              .slice(0, 5)
+                              .map(u => (
+                                <div
+                                  key={u._id}
+                                  className="flex items-center gap-2 px-2 py-2 rounded hover:bg-accent cursor-pointer"
+                                  onClick={() => handleAutocompleteSelect(u)}
+                                >
+                                  <Avatar className="h-6 w-6">
+                                    <AvatarImage src={u.avatar} />
+                                    <AvatarFallback className="text-xs">{getInitials(u.fullName)}</AvatarFallback>
+                                  </Avatar>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-sm font-medium truncate">{u.fullName}</div>
+                                    <div className="text-xs text-muted-foreground truncate">@{u.username || u.email?.split('@')[0]}</div>
+                                  </div>
+                                </div>
+                              ))}
+                            {users.filter(u => {
+                              const searchTerm = autocompleteFilter.toLowerCase();
+                              return u.fullName?.toLowerCase().includes(searchTerm) || u.username?.toLowerCase().includes(searchTerm);
+                            }).length === 0 && (
+                              <div className="text-sm text-muted-foreground px-2 py-2">No members found</div>
+                            )}
+                          </div>
+                        )}
+                        {autocompleteType === 'task' && (
+                          <div className="p-2">
+                            <div className="text-xs text-muted-foreground px-2 py-1 font-medium">Link Task</div>
+                            <div className="text-sm text-muted-foreground px-2 py-2">Type task ID to link (e.g., #TASK-507a4f...)</div>
+                          </div>
+                        )}
+                        {autocompleteType === 'client' && (
+                          <div className="p-2">
+                            <div className="text-xs text-muted-foreground px-2 py-1 font-medium">Link Client</div>
+                            {clients
+                              .filter(c => {
+                                const searchTerm = autocompleteFilter.toLowerCase();
+                                return c.fullName?.toLowerCase().includes(searchTerm) || c.email?.toLowerCase().includes(searchTerm);
+                              })
+                              .slice(0, 5)
+                              .map(c => (
+                                <div
+                                  key={c._id}
+                                  className="flex items-center gap-2 px-2 py-2 rounded hover:bg-accent cursor-pointer"
+                                  onClick={() => handleAutocompleteSelect(c)}
+                                >
+                                  <div className="h-6 w-6 rounded-full bg-purple-100 flex items-center justify-center">
+                                    <span className="text-xs font-medium text-purple-700">{c.fullName?.charAt(0)}</span>
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-sm font-medium truncate">{c.fullName}</div>
+                                    <div className="text-xs text-muted-foreground truncate">{c.email}</div>
+                                  </div>
+                                </div>
+                              ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
+                    <Input
+                      ref={inputRef}
+                      placeholder={`Message #${activeRoomData.name} - Use @username, #TASK-id, #CLIENT-id`}
+                      value={messageText}
+                      onChange={handleMessageInputChange}
+                      className="h-11"
+                      disabled={isSending}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') setShowAutocomplete(false);
+                      }}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1 px-1">
+                      Tip: Mention teammates with @username, link tasks with #TASK-id, or clients with #CLIENT-id
+                    </p>
+                  </div>
                   <Button type="submit" size="default" disabled={!messageText.trim() || isSending} className="h-11 px-6">
                     <Send className="h-4 w-4 mr-2" />
                     Send
@@ -543,7 +966,9 @@ export const ChatSidebar = ({ isOpen, onToggle }: ChatSidebarProps) => {
         <DialogContent className="z-[70] max-w-lg max-h-[90vh] flex flex-col p-0">
           <DialogHeader className="flex-shrink-0 pb-6 px-6 pt-6">
             <DialogTitle className="text-xl font-semibold">Add Members to Room</DialogTitle>
-            <DialogDescription className="text-sm text-gray-600 mt-2">Select team members to add to this chat room</DialogDescription>
+            <DialogDescription className="text-sm text-gray-600 mt-2">
+              Select team members to add to this chat room ({users.length} available)
+            </DialogDescription>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto min-h-0 px-6 pb-4">
             <div className="space-y-4">
@@ -559,25 +984,44 @@ export const ChatSidebar = ({ isOpen, onToggle }: ChatSidebarProps) => {
               <ScrollArea className="h-[400px] border rounded-lg">
                 <div className="p-2 space-y-1">
                   {(() => {
-                    const availableUsers = users.filter(user => 
-                      !activeRoomData?.participants.some((p: any) => p.user._id === user._id) &&
-                      (memberSearchQuery === '' || 
-                        user.fullName.toLowerCase().includes(memberSearchQuery.toLowerCase()) ||
-                        user.email.toLowerCase().includes(memberSearchQuery.toLowerCase()))
+                    console.log('🔍 Add Members Debug:', {
+                      totalUsers: users.length,
+                      usersArray: users,
+                      activeRoomParticipants: activeRoomData?.participants.length,
+                      participantIds: activeRoomData?.participants.map((p: any) => p.user?._id || p.user),
+                      userIds: users.map(u => u._id),
+                      memberSearchQuery
+                    });
+                    
+                    // Show ALL users, just filter by search query
+                    const filteredUsers = users.filter(user => 
+                      memberSearchQuery === '' || 
+                      user.fullName?.toLowerCase().includes(memberSearchQuery.toLowerCase()) ||
+                      user.email?.toLowerCase().includes(memberSearchQuery.toLowerCase())
                     );
                     
-                    if (availableUsers.length === 0) {
+                    console.log('✅ Filtered users to show:', filteredUsers.length, filteredUsers);
+                    console.log('❓ Users state:', users);
+                    
+                    if (users.length === 0) {
                       return (
                         <div className="text-center py-12 text-muted-foreground">
                           <Users className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                          <p className="text-sm font-medium">
-                            {memberSearchQuery ? 'No members found' : 'All team members are already in this room'}
-                          </p>
+                          <p className="text-sm font-medium">Loading team members...</p>
                         </div>
                       );
                     }
                     
-                    return availableUsers.map((user) => (
+                    if (filteredUsers.length === 0) {
+                      return (
+                        <div className="text-center py-12 text-muted-foreground">
+                          <Users className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                          <p className="text-sm font-medium">No members found matching "{memberSearchQuery}"</p>
+                        </div>
+                      );
+                    }
+                    
+                    return filteredUsers.map((user) => (
                       <div
                         key={user._id}
                         className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted cursor-pointer transition-colors"
@@ -916,6 +1360,27 @@ export const ChatSidebar = ({ isOpen, onToggle }: ChatSidebarProps) => {
                       ))}
                     </div>
                   </ScrollArea>
+                </div>
+
+                {/* Action Buttons */}
+                <Separator />
+                <div className="space-y-2">
+                  <Button 
+                    variant="outline" 
+                    className="w-full justify-start text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                    onClick={handleClearMessages}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Clear All Messages
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50"
+                    onClick={handleDeleteRoom}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete Room
+                  </Button>
                 </div>
               </div>
             )}

@@ -32,34 +32,46 @@ const EmployeeClients = () => {
   const { tasks, isLoading: tasksLoading } = useTasks();
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Get clients that have tasks assigned to current employee
+  // Get clients that have tasks assigned to current employee (or as collaborator)
   const assignedClients = useMemo(() => {
     if (!tasks || !clients || !user) return [];
 
-    // Get unique client IDs from tasks assigned to this employee
+    const userId = user.id || (user as any)._id;
+
+    // Get unique client IDs from tasks where user is assigned or collaborating
     const assignedClientIds = new Set(
       tasks
         .filter(task => {
-          if (!task.assignedTo || !Array.isArray(task.assignedTo)) return false;
-          
-          // Handle both string IDs and user objects with _id property
-          return task.assignedTo.some((assigned: any) => {
-            if (typeof assigned === 'string') {
-              // Direct string ID comparison
-              return assigned === user.id || assigned === user.email;
-            } else if (assigned && typeof assigned === 'object') {
-              // User object comparison - check _id property
-              return assigned._id === user.id || assigned.email === user.email;
-            }
-            return false;
-          });
+          // Check assignedTo array
+          const isAssigned = task.assignedTo && Array.isArray(task.assignedTo) && 
+            task.assignedTo.some((assigned: any) => {
+              if (typeof assigned === 'string') {
+                return assigned === userId;
+              } else if (assigned && typeof assigned === 'object') {
+                return assigned._id === userId;
+              }
+              return false;
+            });
+
+          // Check collaborators array
+          const isCollaborator = task.collaborators && Array.isArray(task.collaborators) &&
+            task.collaborators.some((collab: any) => {
+              if (typeof collab === 'string') {
+                return collab === userId;
+              } else if (collab && typeof collab === 'object') {
+                return collab._id === userId;
+              }
+              return false;
+            });
+
+          return isAssigned || isCollaborator;
         })
         .map(task => task.clientId)
         .filter(Boolean)
     );
 
     // Filter clients by assigned IDs
-    return clients.filter(client => assignedClientIds.has(client.id));
+    return clients.filter(client => assignedClientIds.has(client.id) || assignedClientIds.has((client as any)._id));
   }, [tasks, clients, user]);
 
   // Filter clients by search query

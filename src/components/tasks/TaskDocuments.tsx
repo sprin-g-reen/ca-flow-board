@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react';
-import { Upload, File, Download, Trash2, User, Calendar, HardDrive } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Upload, File, Download, Trash2, User, Calendar, HardDrive, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -10,60 +10,64 @@ import { Task } from '@/store/slices/tasksSlice';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { getValidatedToken } from '@/lib/auth';
+import { API_BASE_URL } from '@/config/api.config';
 
 interface TaskDocumentsProps {
   task: Task;
 }
 
 interface Document {
-  id: string;
+  _id: string;
   name: string;
   size: number;
   type: string;
   uploadedBy: {
-    id: string;
-    name: string;
+    _id: string;
+    fullName: string;
     email: string;
   };
   uploadedAt: string;
   url: string;
 }
 
-// Mock documents for now - will be replaced with real API
-const mockDocuments: Document[] = [
-  {
-    id: '1',
-    name: 'GST_Returns_March_2025.pdf',
-    size: 2048000,
-    type: 'application/pdf',
-    uploadedBy: {
-      id: '1',
-      name: 'Team Member 1',
-      email: 'user1@firm.com'
-    },
-    uploadedAt: '2025-03-15T10:30:00Z',
-    url: '#'
-  },
-  {
-    id: '2',
-    name: 'Client_Documentation.xlsx',
-    size: 1024000,
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    uploadedBy: {
-      id: '2',
-      name: 'Team Member 2',
-      email: 'user2@firm.com'
-    },
-    uploadedAt: '2025-03-14T14:20:00Z',
-    url: '#'
-  }
-];
-
 export default function TaskDocuments({ task }: TaskDocumentsProps) {
-  const [documents, setDocuments] = useState<Document[]>(mockDocuments);
+  const [documents, setDocuments] = useState<Document[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { user } = useAuth();
+
+  const taskId = task.id || (task as any)._id;
+
+  // Fetch documents on mount
+  useEffect(() => {
+    fetchDocuments();
+  }, [taskId]);
+
+  const fetchDocuments = async () => {
+    try {
+      setIsLoading(true);
+      const token = getValidatedToken();
+      const response = await fetch(`${API_BASE_URL}/tasks/${taskId}/documents`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch documents');
+      }
+
+      const data = await response.json();
+      setDocuments(data.data || []);
+    } catch (error) {
+      console.error('Error fetching documents:', error);
+      toast.error('Failed to load documents');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 Bytes';
@@ -88,30 +92,35 @@ export default function TaskDocuments({ task }: TaskDocumentsProps) {
     setIsUploading(true);
     
     try {
-      // TODO: Implement actual file upload to your backend
+      const token = getValidatedToken();
+      
       for (const file of Array.from(files)) {
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        const newDocument: Document = {
-          id: Date.now().toString(),
-          name: file.name,
-          size: file.size,
-          type: file.type,
-          uploadedBy: {
-            id: user?.id || '',
-            name: user?.fullName || 'Unknown User',
-            email: user?.email || ''
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch(`${API_BASE_URL}/tasks/${taskId}/documents`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
           },
-          uploadedAt: new Date().toISOString(),
-          url: URL.createObjectURL(file) // Temporary URL for demo
-        };
-        
-        setDocuments(prev => [newDocument, ...prev]);
+          body: formData
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          // Show specific error message from server
+          throw new Error(data.message || `Failed to upload ${file.name}`);
+        }
+
         toast.success(`${file.name} uploaded successfully`);
       }
-    } catch (error) {
-      toast.error('Failed to upload files');
+
+      // Refresh documents list
+      await fetchDocuments();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to upload files');
+      console.error('Upload error:', error);
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) {
@@ -121,14 +130,38 @@ export default function TaskDocuments({ task }: TaskDocumentsProps) {
   };
 
   const handleDownload = (document: Document) => {
-    // TODO: Implement actual download functionality
-    toast.info(`Downloading ${document.name}...`);
+    // Open document URL in new tab
+    const fullUrl = document.url.startsWith('http') 
+      ? document.url 
+      : `${window.location.origin}${document.url}`;
+    window.open(fullUrl, '_blank');
+    toast.success(`Opening ${document.name}...`);
   };
 
-  const handleDelete = (documentId: string) => {
-    // TODO: Implement actual delete functionality
-    setDocuments(prev => prev.filter(doc => doc.id !== documentId));
-    toast.success('Document deleted successfully');
+  const handleDelete = async (documentId: string) => {
+    if (!confirm('Are you sure you want to delete this document?')) {
+      return;
+    }
+
+    try {
+      const token = getValidatedToken();
+      const response = await fetch(`${API_BASE_URL}/tasks/${taskId}/documents/${documentId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete document');
+      }
+
+      setDocuments(prev => prev.filter(doc => doc._id !== documentId));
+      toast.success('Document deleted successfully');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to delete document');
+      console.error('Delete error:', error);
+    }
   };
 
   return (
@@ -182,7 +215,12 @@ export default function TaskDocuments({ task }: TaskDocumentsProps) {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {documents.length === 0 ? (
+          {isLoading ? (
+            <div className="text-center py-8">
+              <Loader2 className="h-12 w-12 text-gray-400 mx-auto mb-4 animate-spin" />
+              <p className="text-gray-500">Loading documents...</p>
+            </div>
+          ) : documents.length === 0 ? (
             <div className="text-center py-8">
               <File className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-500">No documents uploaded yet</p>
@@ -192,7 +230,7 @@ export default function TaskDocuments({ task }: TaskDocumentsProps) {
             <div className="space-y-3">
               {documents.map((document) => (
                 <div
-                  key={document.id}
+                  key={document._id}
                   className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   <div className="flex items-center gap-3 flex-1">
@@ -221,7 +259,7 @@ export default function TaskDocuments({ task }: TaskDocumentsProps) {
                     <div className="flex items-center gap-2 text-sm text-gray-600">
                       <Avatar className="h-6 w-6">
                         <AvatarFallback className="text-xs bg-blue-500 text-white">
-                          {document.uploadedBy.name
+                          {(document.uploadedBy?.fullName || 'U')
                             .split(' ')
                             .map(n => n[0])
                             .join('')
@@ -231,7 +269,7 @@ export default function TaskDocuments({ task }: TaskDocumentsProps) {
                         </AvatarFallback>
                       </Avatar>
                       <span className="hidden sm:inline">
-                        {document.uploadedBy.name}
+                        {document.uploadedBy?.fullName || 'Unknown'}
                       </span>
                     </div>
                     
@@ -247,7 +285,7 @@ export default function TaskDocuments({ task }: TaskDocumentsProps) {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleDelete(document.id)}
+                        onClick={() => handleDelete(document._id)}
                         title="Delete"
                         className="text-red-600 hover:text-red-700 hover:bg-red-50"
                       >

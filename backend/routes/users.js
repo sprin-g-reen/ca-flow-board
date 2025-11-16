@@ -56,6 +56,48 @@ router.get('/', auth, requireOwnerOrAdmin, async (req, res) => {
   }
 });
 
+// @desc    Get team members (coworkers in same firm) - for chat
+// @route   GET /api/users/team/members
+// @access  Private (All authenticated users)
+router.get('/team/members', auth, async (req, res) => {
+  try {
+    console.log('🔍 Team members request from user:', req.user.id, 'firmId:', req.user.firmId?._id);
+    
+    // Get all active users in the same firm (excluding password)
+    let filter = {
+      firmId: req.user.firmId._id,
+      isActive: true
+      // Include all users, even current user (useful for chat member lists)
+    };
+
+    let teamMembers = await User.find(filter)
+      .select('_id fullName email role username avatar isActive')
+      .sort({ fullName: 1 });
+
+    // If no active users found, get all users (including inactive)
+    if (teamMembers.length === 0) {
+      console.log('⚠️ No active users found, fetching all users in firm...');
+      filter = { firmId: req.user.firmId._id };
+      teamMembers = await User.find(filter)
+        .select('_id fullName email role username avatar isActive')
+        .sort({ fullName: 1 });
+    }
+
+    console.log('✅ Found team members:', teamMembers.length, teamMembers.map(u => ({ name: u.fullName, active: u.isActive })));
+
+    res.json({
+      success: true,
+      data: teamMembers
+    });
+  } catch (error) {
+    console.error('Get team members error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
 // @desc    Get user by ID
 // @route   GET /api/users/:id
 // @access  Private

@@ -32,8 +32,9 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { FormDialog } from '@/components/shared/FormDialog';
 import { EnhancedInvoiceForm } from '@/components/invoices/EnhancedInvoiceForm';
+import { InvoicePreviewModal } from '@/components/invoices/InvoicePreviewModal';
 import { InvoiceFilterPanel } from '@/components/invoices/InvoiceFilterPanel';
-import { useInvoices, useUpdateInvoiceStatus, useDeleteInvoice, useBulkDeleteInvoices, useBulkUpdateInvoiceStatus } from '@/hooks/useInvoices';
+import { useInvoices, useInvoice, useUpdateInvoiceStatus, useDeleteInvoice, useBulkDeleteInvoices, useBulkUpdateInvoiceStatus } from '@/hooks/useInvoices';
 import { toggleModal } from '@/store/slices/uiSlice';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '@/store';
@@ -231,6 +232,20 @@ const OwnerInvoices = () => {
   const invoices = invoicesResponse?.data || [];
   const pagination = invoicesResponse?.pagination;
 
+  // Preview modal state
+  const [previewInvoiceId, setPreviewInvoiceId] = useState<string | null>(null);
+  const { data: previewInvoiceResponse } = useInvoice(previewInvoiceId || undefined);
+  const previewInvoice = previewInvoiceResponse?.data;
+
+  const computeCalculations = (inv: any) => {
+    if (!inv) return { subtotal: 0, discountAmount: 0, taxAmount: 0, total: 0 };
+    const subtotal = inv.items?.reduce((s: number, it: any) => s + (it.amount || (it.quantity || 0) * (it.rate || 0)), 0) || 0;
+    const discountAmount = inv.discount?.amount || 0;
+    const taxAmount = inv.taxAmount || 0;
+    const total = inv.totalAmount || subtotal - discountAmount + taxAmount;
+    return { subtotal, discountAmount, taxAmount, total };
+  };
+
   // Update select all state when invoices or selection changes
   useEffect(() => {
     if (invoices.length > 0) {
@@ -422,7 +437,7 @@ const OwnerInvoices = () => {
                         <TableCell className="font-medium">{invoice.invoiceNumber}</TableCell>
                         <TableCell>
                           <div>
-                            <div className="font-medium">{invoice.client?.name || 'Unknown Client'}</div>
+                            <div className="font-medium">{(invoice.client as any)?.fullName || invoice.client?.name || 'Unknown Client'}</div>
                             <div className="text-sm text-muted-foreground">{invoice.client?.email}</div>
                           </div>
                         </TableCell>
@@ -463,7 +478,7 @@ const OwnerInvoices = () => {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-48">
-                              <DropdownMenuItem className="cursor-pointer">
+                              <DropdownMenuItem className="cursor-pointer" onClick={() => setPreviewInvoiceId(invoice._id)}>
                                 <Eye className="h-4 w-4 mr-2 text-blue-600" />
                                 <span>View Details</span>
                               </DropdownMenuItem>
@@ -562,6 +577,16 @@ const OwnerInvoices = () => {
             </>
           )}
           
+            {/* Invoice Preview Modal */}
+            <InvoicePreviewModal
+              isOpen={!!previewInvoiceId}
+              onClose={() => setPreviewInvoiceId(null)}
+              invoiceData={previewInvoice}
+              calculations={computeCalculations(previewInvoice)}
+              isInterState={false}
+              clientData={previewInvoice?.client}
+            />
+
           <FormDialog
             open={modals.addInvoice}
             onOpenChange={handleCloseAddInvoiceModal}

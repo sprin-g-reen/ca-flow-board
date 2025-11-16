@@ -25,7 +25,8 @@ import { EmployeePerformanceMetrics } from '@/components/dashboard/EmployeePerfo
 import { RevenueTracker } from '@/components/dashboard/RevenueTracker';
 import { ClientEngagementAnalytics } from '@/components/dashboard/ClientEngagementAnalytics';
 import { DatabaseLogs } from '@/components/analytics/DatabaseLogs';
-import { BarChart, Users, DollarSign, UserCheck, Database } from 'lucide-react';
+import { AIUsageAnalytics } from '@/components/analytics/AIUsageAnalytics';
+import { BarChart, Users, DollarSign, UserCheck, Database, Bot } from 'lucide-react';
 
 const OwnerAnalytics = () => {
   const [timeRange, setTimeRange] = useState('year');
@@ -48,7 +49,7 @@ const OwnerAnalytics = () => {
       </div>
 
       <Tabs defaultValue="tasks" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="tasks" className="flex items-center gap-2">
             <BarChart className="h-4 w-4" />
             Real-Time Tasks
@@ -64,6 +65,10 @@ const OwnerAnalytics = () => {
           <TabsTrigger value="clients" className="flex items-center gap-2">
             <UserCheck className="h-4 w-4" />
             Client Engagement
+          </TabsTrigger>
+          <TabsTrigger value="ai" className="flex items-center gap-2">
+            <Bot className="h-4 w-4" />
+            AI Usage & Response
           </TabsTrigger>
           <TabsTrigger value="logs" className="flex items-center gap-2">
             <Database className="h-4 w-4" />
@@ -135,6 +140,23 @@ const OwnerAnalytics = () => {
             </CardHeader>
             <CardContent>
               <ClientEngagementAnalytics />
+            </CardContent>
+          </Card>
+        </TabsContent>
+        
+        <TabsContent value="ai">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Bot className="h-5 w-5" />
+                AI Usage & Response Analytics
+              </CardTitle>
+              <CardDescription>
+                Insights into AI assistant usage, query patterns, and response performance
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <AIUsageAnalytics />
             </CardContent>
           </Card>
         </TabsContent>

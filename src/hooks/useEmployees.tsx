@@ -44,30 +44,51 @@ export const useEmployees = () => {
           throw new Error('Authentication Error: Your session has expired. Please log in again.');
         }
 
-        // Get all users, we'll filter for employees and admins on frontend
-        // Use a high limit to get all users at once for employee management
-        const response = await fetch(`${API_BASE_URL}/users?limit=1000`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        });
+        let response;
+        let allUsers = [];
 
-        if (!response.ok) {
-          if (response.status === 401) {
-            throw new Error('Authentication failed. Please log in again.');
+        // Try team/members endpoint first (accessible to all authenticated users including employees)
+        try {
+          response = await fetch(`${API_BASE_URL}/users/team/members`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+          });
+
+          if (response.ok) {
+            const result = await response.json();
+            allUsers = result.data || [];
+            console.log('✅ Loaded from /team/members:', allUsers.length);
+          } else {
+            throw new Error('Team members endpoint failed');
           }
-          const errorText = await response.text();
-          throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+        } catch (teamError) {
+          // Fallback to /users endpoint for admin/owner roles
+          console.log('⚠️ /team/members failed, trying /users endpoint (admin/owner only)');
+          response = await fetch(`${API_BASE_URL}/users?limit=1000`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+          });
+
+          if (!response.ok) {
+            if (response.status === 401) {
+              throw new Error('Authentication failed. Please log in again.');
+            }
+            const errorText = await response.text();
+            throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+          }
+
+          const result = await response.json();
+          allUsers = result.data?.users || [];
+          console.log('Raw API response from /users:', result);
         }
 
-        const result = await response.json();
-        console.log('Raw API response:', result);
-        console.log('Total users from API:', result.data?.users?.length || 0);
-        console.log('Pagination info:', result.data?.pagination);
+        console.log('Total users from API:', allUsers.length);
         
         // Filter for employees, admins, and owners (exclude superadmin and client roles)
-        const allUsers = result.data?.users || [];
         const staffUsers = allUsers.filter((user: any) => 
           user.role === 'employee' || user.role === 'admin' || user.role === 'owner'
         );
