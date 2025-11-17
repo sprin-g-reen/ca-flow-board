@@ -68,9 +68,12 @@ export const useSettings = (options: UseSettingsOptions = {}) => {
 
   // Update individual setting mutation
   const updateSettingMutation = useMutation({
-    mutationFn: ({ category: cat, key, value }: { category: keyof AllSettings; key: string; value: any }) =>
-      settingsService.updateSetting(cat, key, value),
+    mutationFn: ({ category: cat, key, value }: { category: keyof AllSettings; key: string; value: any }) => {
+      console.log('🚀 Mutation function called:', { category: cat, key, value });
+      return settingsService.updateSetting(cat, key, value);
+    },
     onSuccess: (data, variables) => {
+      console.log('✅ Mutation success:', { data, variables });
       queryClient.setQueryData(['settings', variables.category], (old: any) => {
         if (!old) return old;
         return { ...old, [variables.key]: variables.value };
@@ -96,6 +99,7 @@ export const useSettings = (options: UseSettingsOptions = {}) => {
       });
     },
     onError: (error: any) => {
+      console.error('❌ Mutation error:', error);
       toast({
         title: "Update Failed",
         description: error.message || "Failed to update setting. Please try again.",
@@ -180,6 +184,7 @@ export const useSettings = (options: UseSettingsOptions = {}) => {
   // Update individual setting with optional auto-save
   const updateSetting = (cat: keyof AllSettings, key: string, value: any, immediate = false) => {
     const changeKey = `${cat}.${key}`;
+    console.log('🔧 updateSetting called:', { category: cat, key, value, immediate });
     setUnsavedChanges(prev => ({ ...prev, [changeKey]: value }));
 
     if (autoSave && !immediate) {
@@ -190,11 +195,13 @@ export const useSettings = (options: UseSettingsOptions = {}) => {
 
       // Set new timeout for auto-save
       const newTimeout = setTimeout(() => {
+        console.log('💾 Auto-saving setting:', { category: cat, key, value });
         updateSettingMutation.mutate({ category: cat, key, value });
       }, saveDelay);
 
       setSaveTimeout(newTimeout);
     } else if (immediate) {
+      console.log('💾 Immediately saving setting:', { category: cat, key, value });
       updateSettingMutation.mutate({ category: cat, key, value });
     }
   };
@@ -283,8 +290,27 @@ export const useSettings = (options: UseSettingsOptions = {}) => {
 
   // Get setting value with fallback to default
   const getSetting = (cat: keyof AllSettings, key: string) => {
-    const categorySettings = settings?.[cat];
+    // When useSettings is called with a specific category, settings IS that category's data
+    // Otherwise, settings contains all categories
+    let categorySettings;
+    
+    if (category) {
+      // If we initialized with a specific category, settings is already that category
+      categorySettings = cat === category ? settings : undefined;
+    } else {
+      // If we initialized without a category, settings contains all categories
+      categorySettings = settings?.[cat];
+    }
+    
     const unsavedValue = unsavedChanges[`${cat}.${key}`];
+    
+    console.log(`🔍 getSetting(${cat}, ${key}):`, {
+      category,
+      settings,
+      categorySettings,
+      unsavedValue,
+      finalValue: unsavedValue !== undefined ? unsavedValue : categorySettings?.[key]
+    });
     
     if (unsavedValue !== undefined) {
       return unsavedValue;

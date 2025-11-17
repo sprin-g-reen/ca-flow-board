@@ -27,8 +27,9 @@ export interface InvoiceAccount {
 }
 
 export interface CompanySettings {
-  companyName: string;
-  businessType: string;
+  name: string; // Primary field - matches backend
+  companyName?: string; // Legacy field for backwards compatibility
+  businessType?: string;
   email: string;
   phone: string;
   address: string;
@@ -41,6 +42,13 @@ export interface CompanySettings {
   registrationNumber?: string;
   website?: string;
   description?: string;
+  branding?: {
+    primaryColor?: string;
+    secondaryColor?: string;
+    logoFile?: string;
+    footerText?: string;
+    termsAndConditions?: string;
+  };
   invoiceAccounts?: {
     account_1: InvoiceAccount;
     account_2: InvoiceAccount;
@@ -125,8 +133,11 @@ class SettingsService {
   async getAllSettings(): Promise<AllSettings> {
     try {
       const response = await api.get('/settings') as any;
+      console.log('📡 API response - getAllSettings:', response);
       // Normalize: some backends return { data: ... } while apiClient returns body directly
-      return response?.data || response;
+      const settings = response?.data || response;
+      console.log('📡 Normalized settings:', settings);
+      return settings;
     } catch (error) {
       console.error('Failed to fetch settings:', error);
       throw error;
@@ -137,6 +148,7 @@ class SettingsService {
   async getSettings(category: keyof AllSettings): Promise<any> {
     try {
       const response = await api.get(`/settings/${category}`) as any;
+      console.log(`📡 API response - getSettings(${category}):`, response);
       return response?.data || response;
     } catch (error) {
       console.error(`Failed to fetch ${category} settings:`, error);
@@ -158,7 +170,9 @@ class SettingsService {
   // Update individual setting
   async updateSetting(category: keyof AllSettings, key: string, value: any): Promise<any> {
     try {
+      console.log('📡 API call - updateSetting:', { category, key, value });
       const response = await api.put(`/settings/${category}/${key}`, { value }) as any;
+      console.log('📡 API response - updateSetting:', response);
       return response?.data || response;
     } catch (error) {
       console.error(`Failed to update ${category}.${key} setting:`, error);
@@ -215,12 +229,12 @@ class SettingsService {
   getDefaultSettings(): AllSettings {
     return {
       company: {
-        companyName: 'Your Firm Name',
+        name: 'Your Firm Name',
         businessType: 'Chartered Accountancy Firm',
         email: 'contact@yourfirm.com',
         phone: '+91 00000 00000',
         address: '',
-        dateFormat: 'dd/mm/yyyy',
+        dateFormat: 'DD/MM/YYYY',
         timeZone: 'Asia/Kolkata',
         currency: 'INR',
         gstNumber: '',

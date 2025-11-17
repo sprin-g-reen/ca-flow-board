@@ -78,7 +78,7 @@ export const requireClientAccess = (req, res, next) => {
 
 // Check if user can manage other users
 export const requireUserManagementAccess = (req, res, next) => {
-  const targetUserId = req.params.userId || req.body.userId;
+  const targetUserId = req.params.userId || req.params.id || req.body.userId;
   
   if (!targetUserId) {
     return next();

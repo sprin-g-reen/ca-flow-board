@@ -35,7 +35,8 @@ const SimpleInvoiceTemplate = ({
   clientData, 
   accountData, 
   branding,
-  displayNumber 
+  displayNumber,
+  companyName
 }: any) => {
   return (
     <div className="bg-white p-8 max-w-3xl mx-auto" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
@@ -50,11 +51,11 @@ const SimpleInvoiceTemplate = ({
             <img src={branding.logoFile} alt="Logo" className="h-12 mb-4" />
           ) : (
             <div className="text-2xl font-bold mb-2" style={{ color: branding.primaryColor || '#3b82f6' }}>
-              {accountData?.companyName || 'CA Flow Board'}
+              {companyName}
             </div>
           )}
           <div className="text-sm text-gray-600 font-medium">
-            {accountData?.companyName || 'CA Flow Board'}
+            {companyName}
           </div>
         </div>
         
@@ -89,7 +90,7 @@ const SimpleInvoiceTemplate = ({
       {/* From/To */}
       <div className="grid grid-cols-2 gap-8 mb-8">
         <div>
-          <div className="font-semibold text-sm mb-2">{accountData?.companyName || 'CA Flow Board'}</div>
+          <div className="font-semibold text-sm mb-2">{companyName}</div>
         </div>
         <div>
           <div className="font-semibold text-sm mb-2">Bill to</div>
@@ -193,7 +194,7 @@ const SimpleInvoiceTemplate = ({
   );
 };
 
-// Template 2: Professional GST Invoice (Like TATA)
+// Template 2: Professional GST Invoice
 const ProfessionalGSTTemplate = ({ 
   invoiceData, 
   calculations, 
@@ -201,7 +202,8 @@ const ProfessionalGSTTemplate = ({
   clientData, 
   accountData, 
   branding,
-  displayNumber 
+  displayNumber,
+  companyName
 }: any) => {
   // Calculate tax breakdown
   const calculateItemTax = (item: any) => {
@@ -238,11 +240,11 @@ const ProfessionalGSTTemplate = ({
                   <img src={branding.logoFile} alt="Logo" className="h-12 w-12 object-contain" />
                 ) : (
                   <div className="h-12 w-12 bg-blue-600 text-white flex items-center justify-center font-bold text-xl">
-                    {accountData?.companyName?.charAt(0) || 'C'}
+                    {companyName?.charAt(0) || 'C'}
                   </div>
                 )}
                 <div>
-                  <div className="font-bold text-sm">{accountData?.companyName?.toUpperCase()}</div>
+                  <div className="font-bold text-sm">{companyName?.toUpperCase()}</div>
                   {accountData?.gstNumber && <div className="text-xs">GSTIN {accountData.gstNumber}</div>}
                 </div>
               </div>
@@ -611,6 +613,9 @@ export const InvoicePreviewModal = ({
   const collectionMethod = invoiceData.collectionMethod || 'account_1';
   const accountData = settings?.invoiceAccounts?.[collectionMethod];
   const branding = accountData?.branding || {};
+  
+  // Use main company name from settings, fallback to account name
+  const companyName = settings?.name || accountData?.companyName || 'CA Flow Board';
 
   // Determine which template to use based on collection method
   const useSimpleTemplate = collectionMethod === 'account_1';
@@ -695,6 +700,7 @@ export const InvoicePreviewModal = ({
                 accountData={accountData}
                 branding={branding}
                 displayNumber={displayNumber}
+                companyName={companyName}
               />
             ) : (
               <ProfessionalGSTTemplate
@@ -705,6 +711,7 @@ export const InvoicePreviewModal = ({
                 accountData={accountData}
                 branding={branding}
                 displayNumber={displayNumber}
+                companyName={companyName}
               />
             )}
           </div>

@@ -8,6 +8,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { store } from './store';
 import { AuthProvider } from './components/auth/AuthProvider';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { ThemeApplier } from './components/layout/ThemeApplier';
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 import DashboardLayout from './components/layout/DashboardLayout';
@@ -58,6 +59,8 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <AuthProvider>
+            {/* Apply theme colors globally for all users */}
+            <ThemeApplier />
             <Routes>
               {/* Public routes */}
               <Route path="/login" element={<Login />} />

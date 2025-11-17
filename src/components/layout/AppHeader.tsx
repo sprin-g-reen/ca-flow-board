@@ -14,6 +14,7 @@ import { GlobalSearch } from '@/components/shared/GlobalSearch';
 import { FadeIn } from "@/components/ui/animations";
 import { toast } from '@/components/ui/enhanced-toast';
 import { NotificationCenter } from '@/components/notifications/NotificationCenter';
+import { EmployeeSettingsModal } from '@/components/employee/EmployeeSettingsModal';
 import { useSystemVitals } from '@/hooks/useSystemVitals';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Line } from 'react-chartjs-2';
@@ -60,10 +61,13 @@ const AppHeader = ({ onAIChatToggle }: AppHeaderProps = {}) => {
   const { settings: settingsObj, getSetting } = useSettings({ category: 'company' });
 
   // Derive brand name and logo from settings with sensible fallbacks
-  const brandName = getSetting('company', 'companyName') || settingsObj?.company?.companyName || 'CA Flow Board';
-  const branding = (getSetting('company', 'branding') || settingsObj?.company?.branding) as any || {};
-  const logoUrl = branding?.logoFile || settingsObj?.company?.invoiceAccounts?.account_1?.branding?.logoFile || '';
+  // When using category: 'company', settingsObj IS the company settings directly, not nested
+  // Check both 'name' (backend field) and 'companyName' (legacy) for backwards compatibility
+  const brandName = settingsObj?.name || settingsObj?.companyName || 'CA Flow Board';
+  const branding = (settingsObj?.branding) as any || {};
+  const logoUrl = branding?.logoFile || settingsObj?.invoiceAccounts?.account_1?.branding?.logoFile || '';
   const [showVitalsModal, setShowVitalsModal] = useState(false);
+  const [showEmployeeSettings, setShowEmployeeSettings] = useState(false);
   const [cpuHistory, setCpuHistory] = useState<number[]>([]);
   const [applicationUptime, setApplicationUptime] = useState<number>(0);
   const [appUptimeHistory, setAppUptimeHistory] = useState<number[]>([]);
@@ -345,12 +349,34 @@ const AppHeader = ({ onAIChatToggle }: AppHeaderProps = {}) => {
                 
                 <DropdownMenuSeparator />
                 
-                <DropdownMenuItem className="p-3 focus:bg-gray-50 rounded-md">
+                <DropdownMenuItem 
+                  onClick={() => {
+                    if (role === 'owner') {
+                      navigate('/owner/settings');
+                    } else {
+                      // For employees and other roles, show profile/settings
+                      if (role === 'employee') {
+                        navigate('/employee/profile');
+                      }
+                    }
+                  }}
+                  className="p-3 focus:bg-gray-50 rounded-md"
+                >
                   <User className="mr-3 h-4 w-4" />
                   <span>Profile & Account</span>
                 </DropdownMenuItem>
                 
-                <DropdownMenuItem className="p-3 focus:bg-gray-50 rounded-md">
+                <DropdownMenuItem 
+                  onClick={() => {
+                    if (role === 'owner') {
+                      navigate('/owner/settings');
+                    } else {
+                      // For employees and other roles, show settings modal
+                      setShowEmployeeSettings(true);
+                    }
+                  }}
+                  className="p-3 focus:bg-gray-50 rounded-md"
+                >
                   <Settings className="mr-3 h-4 w-4" />
                   <span>Settings & Preferences</span>
                 </DropdownMenuItem>
@@ -540,6 +566,12 @@ const AppHeader = ({ onAIChatToggle }: AppHeaderProps = {}) => {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+          
+          {/* Employee Settings Modal */}
+          <EmployeeSettingsModal 
+            isOpen={showEmployeeSettings} 
+            onClose={() => setShowEmployeeSettings(false)} 
+          />
         </div>
       </header>
     </FadeIn>

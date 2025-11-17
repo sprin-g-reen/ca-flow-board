@@ -24,11 +24,9 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useSettings } from '@/hooks/useSettings';
-import { BackendConnectivityTest } from '@/components/testing/BackendConnectivityTest';
 import { SystemConfigurationSettings } from '@/components/settings/SystemConfigurationSettings';
 import { InvoiceAccountsSettings } from '@/components/settings/InvoiceAccountsSettings';
 import { RecurringTaskAutomation } from '@/components/automation/RecurringTaskAutomation';
-import { IntegrationsTestSuite } from '@/components/testing/IntegrationsTestSuite';
 import { EmailTemplateManager } from '@/components/communication/EmailTemplateManager';
 import { ExcelManager } from '@/components/excel/ExcelManager';
 import { 
@@ -391,6 +389,150 @@ const OwnerSettings = () => {
                         <SelectItem value="GBP">British Pound (£)</SelectItem>
                       </SelectContent>
                     </Select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-8">
+                <h4 className="text-md font-semibold mb-4">Branding & Colors</h4>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Customize your application's accent colors and logo to match your brand
+                </p>
+                
+                {/* Company Logo Upload */}
+                <div className="mb-6 p-4 border rounded-lg bg-gray-50">
+                  <Label className="text-sm font-semibold mb-2 block">Company Logo</Label>
+                  <div className="flex items-center gap-4">
+                    {(getSetting('company', 'branding') as any)?.logoFile ? (
+                      <div className="relative">
+                        <img 
+                          src={(getSetting('company', 'branding') as any)?.logoFile} 
+                          alt="Company Logo" 
+                          className="h-20 w-20 object-contain border rounded"
+                        />
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          className="absolute -top-2 -right-2 h-6 w-6 rounded-full p-0"
+                          onClick={() => {
+                            const branding = (getSetting('company', 'branding') as any) || {};
+                            updateSetting('company', 'branding', { ...branding, logoFile: '' });
+                          }}
+                        >
+                          ×
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="h-20 w-20 border-2 border-dashed rounded flex items-center justify-center text-gray-400">
+                        <Upload className="h-8 w-8" />
+                      </div>
+                    )}
+                    <div className="flex-1">
+                      <Input
+                        type="file"
+                        accept="image/*"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          
+                          // Validate file size (max 2MB)
+                          if (file.size > 2 * 1024 * 1024) {
+                            toast({
+                              title: 'File too large',
+                              description: 'Please upload an image smaller than 2MB',
+                              variant: 'destructive',
+                            });
+                            return;
+                          }
+                          
+                          // Convert to base64
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            const base64String = reader.result as string;
+                            const branding = (getSetting('company', 'branding') as any) || {};
+                            updateSetting('company', 'branding', { ...branding, logoFile: base64String });
+                            toast({
+                              title: 'Logo uploaded',
+                              description: 'Your company logo has been updated',
+                            });
+                          };
+                          reader.readAsDataURL(file);
+                          
+                          // Reset input
+                          e.target.value = '';
+                        }}
+                        className="cursor-pointer"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Upload your company logo. PNG, JPG or SVG. Max 2MB.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Color Pickers */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="primaryColor">Primary Accent Color</Label>
+                    <div className="flex gap-2">
+                      <Input 
+                        id="primaryColor"
+                        type="color"
+                        value={(getSetting('company', 'branding') as any)?.primaryColor || '#3b82f6'}
+                        onChange={(e) => {
+                          const currentBranding = (getSetting('company', 'branding') as any) || {};
+                          const newBranding = { ...currentBranding, primaryColor: e.target.value };
+                          console.log('🎨 Updating primary color:', e.target.value, 'Full branding:', newBranding);
+                          updateSetting('company', 'branding', newBranding);
+                        }}
+                        className="w-20 h-10 cursor-pointer"
+                      />
+                      <Input 
+                        type="text"
+                        value={(getSetting('company', 'branding') as any)?.primaryColor || '#3b82f6'}
+                        onChange={(e) => {
+                          const currentBranding = (getSetting('company', 'branding') as any) || {};
+                          const newBranding = { ...currentBranding, primaryColor: e.target.value };
+                          updateSetting('company', 'branding', newBranding);
+                        }}
+                        placeholder="#3b82f6"
+                        className="flex-1"
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Used for buttons, links, and primary UI elements
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="secondaryColor">Secondary Accent Color</Label>
+                    <div className="flex gap-2">
+                      <Input 
+                        id="secondaryColor"
+                        type="color"
+                        value={(getSetting('company', 'branding') as any)?.secondaryColor || '#1e40af'}
+                        onChange={(e) => {
+                          const currentBranding = (getSetting('company', 'branding') as any) || {};
+                          const newBranding = { ...currentBranding, secondaryColor: e.target.value };
+                          console.log('🎨 Updating secondary color:', e.target.value, 'Full branding:', newBranding);
+                          updateSetting('company', 'branding', newBranding);
+                        }}
+                        className="w-20 h-10 cursor-pointer"
+                      />
+                      <Input 
+                        type="text"
+                        value={(getSetting('company', 'branding') as any)?.secondaryColor || '#1e40af'}
+                        onChange={(e) => {
+                          const currentBranding = (getSetting('company', 'branding') as any) || {};
+                          const newBranding = { ...currentBranding, secondaryColor: e.target.value };
+                          updateSetting('company', 'branding', newBranding);
+                        }}
+                        placeholder="#1e40af"
+                        className="flex-1"
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Used for hover states and secondary elements
+                    </p>
                   </div>
                 </div>
               </div>

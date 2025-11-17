@@ -209,7 +209,7 @@ router.post('/', auth, requireOwnerOrAdmin, [
 // @access  Private
 router.put('/:id', auth, requireUserManagementAccess, async (req, res) => {
   try {
-    const { fullName, phone, department, expertise, companyName, address, isActive } = req.body;
+    const { fullName, phone, department, expertise, companyName, address, isActive, avatar, email } = req.body;
     
     const user = await User.findById(req.params.id);
     if (!user) {
@@ -230,6 +230,8 @@ router.put('/:id', auth, requireUserManagementAccess, async (req, res) => {
     const updateData = { fullName, phone };
     if (isActive !== undefined) updateData.isActive = isActive;
     if (address) updateData.address = address;
+    if (avatar !== undefined) updateData.avatar = avatar; // Allow avatar updates
+    if (email) updateData.email = email; // Allow email updates
     
     // Role-specific updates
     if (user.role === 'employee') {
