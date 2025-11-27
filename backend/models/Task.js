@@ -281,25 +281,44 @@ taskSchema.virtual('totalCost').get(function() {
 // Generate task ID before saving
 taskSchema.pre('save', async function(next) {
   if (this.isNew && !this.taskId) {
-    try {
-      const firm = await mongoose.model('Firm').findById(this.firm);
-      const prefix = firm?.settings?.taskPrefix || 'TSK';
-      const counterId = `task_${this.firm}`;
-      
-      console.log(`🔢 [PRE-SAVE] Generating taskId for firm ${this.firm}...`);
-      
-      // Use findOneAndUpdate with atomic increment to avoid race conditions
-      const counter = await Counter.findOneAndUpdate(
-        { _id: counterId },
-        { $inc: { seq: 1 } },
-        { new: true, upsert: true }
-      );
-      
-      this.taskId = `${prefix}${String(counter.seq).padStart(4, '0')}`;
-      console.log(`✅ [PRE-SAVE] Generated taskId: ${this.taskId} (counter: ${counter.seq})`);
-    } catch (err) {
-      console.error(`❌ [PRE-SAVE] Error generating taskId:`, err);
-      return next(err);
+    const maxRetries = 10;
+    let attempt = 0;
+    
+    while (attempt < maxRetries) {
+      try {
+        const firm = await mongoose.model('Firm').findById(this.firm);
+        const prefix = firm?.settings?.taskPrefix || 'TSK';
+        const counterId = `task_${this.firm}`;
+        
+        console.log(`🔢 [PRE-SAVE] Attempt ${attempt + 1}: Generating taskId for firm ${this.firm}...`);
+        
+        // Use findOneAndUpdate with atomic increment to avoid race conditions
+        const counter = await Counter.findOneAndUpdate(
+          { _id: counterId },
+          { $inc: { seq: 1 } },
+          { new: true, upsert: true }
+        );
+        
+        const newTaskId = `${prefix}${String(counter.seq).padStart(4, '0')}`;
+        
+        // Check if this taskId already exists
+        const existing = await mongoose.model('Task').findOne({ taskId: newTaskId });
+        
+        if (!existing) {
+          this.taskId = newTaskId;
+          console.log(`✅ [PRE-SAVE] Generated unique taskId: ${this.taskId} (counter: ${counter.seq})`);
+          break;
+        } else {
+          console.warn(`⚠️ [PRE-SAVE] TaskId ${newTaskId} already exists, retrying...`);
+          attempt++;
+          if (attempt >= maxRetries) {
+            throw new Error(`Failed to generate unique taskId after ${maxRetries} attempts`);
+          }
+        }
+      } catch (err) {
+        console.error(`❌ [PRE-SAVE] Error generating taskId:`, err);
+        return next(err);
+      }
     }
   }
   next();

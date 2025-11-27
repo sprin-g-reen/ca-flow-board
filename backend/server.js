@@ -59,7 +59,8 @@ import { createServer } from 'http';
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Connect to MongoDB and seed templates
+// Connect to MongoDB and seed templa
+// tes
 const initializeApp = async () => {
   try {
     await connectDB();
