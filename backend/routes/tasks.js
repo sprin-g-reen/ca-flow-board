@@ -65,7 +65,7 @@ router.get('/', auth, async (req, res) => {
     const { status, priority, assignedTo, client, category, sub_category, page = 1, limit = 20, includeArchived = false, search } = req.query;
     
     // Build filter
-    const filter = { firm: req.user.firmId._id };
+    const filter = { firm: req.user.firmId?._id || req.user.firmId };
     
     // Exclude archived tasks by default unless explicitly requested
     if (includeArchived !== 'true') {
@@ -74,7 +74,13 @@ router.get('/', auth, async (req, res) => {
     
     if (status) filter.status = status;
     if (priority) filter.priority = priority;
-    if (assignedTo) filter.assignedTo = assignedTo;
+    if (assignedTo) {
+      if (assignedTo === 'unassigned') {
+        filter.assignedTo = null;
+      } else {
+        filter.assignedTo = assignedTo;
+      }
+    }
     if (client) filter.client = client;
     if (category && category !== 'all') filter.category = category;
     if (sub_category && sub_category !== 'all') filter.sub_category = sub_category;
@@ -176,7 +182,7 @@ router.post('/', auth, [
       status: 'todo', // Changed from 'pending' to 'todo'
       dueDate: due_date ? new Date(due_date) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // Default to 1 week from now
       assignedBy: req.user._id,
-      firm: req.user.firmId._id,
+      firm: req.user.firmId?._id || req.user.firmId,
       billable: is_payable_task || false,
       isRecurring: is_recurring || false
     };
@@ -1051,7 +1057,7 @@ router.post('/bulk-delete', auth, async (req, res) => {
     // Build delete filter for tasks in user's firm
     const deleteFilter = {
       _id: { $in: taskIds },
-      firm: req.user.firmId._id
+      firm: req.user.firmId?._id || req.user.firmId
     };
 
     // Delete tasks that belong to the user's firm and user has permission to delete
