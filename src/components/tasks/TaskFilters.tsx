@@ -5,7 +5,6 @@ import { setActiveFilters, clearFilters } from '@/store/slices/uiSlice';
 import { useState, useEffect } from 'react';
 import { API_BASE_URL } from '@/config/api.config';
 import { getValidatedToken } from '@/lib/auth';
-import { useAuth } from '@/hooks/useAuth';
 import {
   Card,
   CardContent,
@@ -23,7 +22,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
 
 interface TaskFiltersProps {
   sortBy: string;
@@ -34,13 +32,9 @@ interface TaskFiltersProps {
 const TaskFilters = ({ sortBy, sortDirection, onSortChange }: TaskFiltersProps) => {
   const dispatch = useDispatch();
   const { activeFilters } = useSelector((state: RootState) => state.ui);
-  const { role } = useAuth();
   const [subCategories, setSubCategories] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [employees, setEmployees] = useState<any[]>([]);
-  
-  // Check if user is admin/owner
-  const isAdminOrOwner = role === 'admin' || role === 'owner';
 
   const statusOptions = [
     { value: 'todo', label: 'To Do' },
@@ -70,34 +64,32 @@ const TaskFilters = ({ sortBy, sortDirection, onSortChange }: TaskFiltersProps) 
     { value: 'thisWeek', label: 'This Week' },
   ];
 
-  // Fetch employees for admin/owner
+  // Fetch employees for all users
   useEffect(() => {
     const fetchEmployees = async () => {
-      if (isAdminOrOwner) {
-        try {
-          const token = getValidatedToken();
-          const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-          if (token) headers['Authorization'] = `Bearer ${token}`;
-          
-          const response = await fetch(`${API_BASE_URL}/users/team/members`, {
-            headers
-          });
-          
-          if (response.ok) {
-            const result = await response.json();
-            if (result.success) {
-              setEmployees(result.data || []);
-            }
+      try {
+        const token = getValidatedToken();
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        
+        const response = await fetch(`${API_BASE_URL}/users/team/members`, {
+          headers
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success) {
+            setEmployees(result.data || []);
           }
-        } catch (error) {
-          console.error('Error fetching employees:', error);
-          setEmployees([]);
         }
+      } catch (error) {
+        console.error('Error fetching employees:', error);
+        setEmployees([]);
       }
     };
 
     fetchEmployees();
-  }, [isAdminOrOwner]);
+  }, []);
 
   // Fetch sub-categories when category changes
   useEffect(() => {
@@ -130,47 +122,23 @@ const TaskFilters = ({ sortBy, sortDirection, onSortChange }: TaskFiltersProps) 
     fetchSubCategories();
   }, [selectedCategory]);
 
-  const handleStatusChange = (id: string, checked: boolean) => {
-    const currentStatuses = activeFilters.status || [];
-    
-    if (checked) {
-      dispatch(setActiveFilters({ 
-        status: [...currentStatuses, id] 
-      }));
+  const handleStatusChange = (value: string) => {
+    if (value === 'all') {
+      dispatch(setActiveFilters({ status: undefined }));
     } else {
-      dispatch(setActiveFilters({ 
-        status: currentStatuses.filter((s) => s !== id) 
-      }));
+      dispatch(setActiveFilters({ status: [value] }));
     }
   };
 
-  const handlePriorityChange = (id: string, checked: boolean) => {
-    const currentPriorities = activeFilters.priority || [];
-    
-    if (checked) {
-      dispatch(setActiveFilters({ 
-        priority: [...currentPriorities, id] 
-      }));
+  const handlePriorityChange = (value: string) => {
+    if (value === 'all') {
+      dispatch(setActiveFilters({ priority: undefined }));
     } else {
-      dispatch(setActiveFilters({ 
-        priority: currentPriorities.filter((p) => p !== id) 
-      }));
+      dispatch(setActiveFilters({ priority: [value] }));
     }
   };
 
-  const handleCategoryChange = (id: string, checked: boolean) => {
-    const currentCategories = activeFilters.category || [];
-    
-    if (checked) {
-      dispatch(setActiveFilters({ 
-        category: [...currentCategories, id] 
-      }));
-    } else {
-      dispatch(setActiveFilters({ 
-        category: currentCategories.filter((c) => c !== id) 
-      }));
-    }
-  };
+
 
   const handleCategorySelect = (value: string) => {
     setSelectedCategory(value);
@@ -201,15 +169,7 @@ const TaskFilters = ({ sortBy, sortDirection, onSortChange }: TaskFiltersProps) 
     if (value === 'all') {
       dispatch(setActiveFilters({ assignedTo: undefined }));
     } else {
-      dispatch(setActiveFilters({ assignedTo: value }));
-    }
-  };
-
-  const handleStatusDropdownChange = (value: string) => {
-    if (value === 'all') {
-      dispatch(setActiveFilters({ status: undefined }));
-    } else {
-      dispatch(setActiveFilters({ status: [value] }));
+      dispatch(setActiveFilters({ assignedTo: [value] }));
     }
   };
 
@@ -225,100 +185,78 @@ const TaskFilters = ({ sortBy, sortDirection, onSortChange }: TaskFiltersProps) 
         <CardTitle className="text-lg">Filter & Sort Tasks</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className={`grid grid-cols-1 gap-6 ${isAdminOrOwner ? 'md:grid-cols-6' : 'md:grid-cols-5'}`}>
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-6">
+          {/* Assigned To Filter */}
+          <div>
+            <Label className="mb-2 block font-medium">Assigned To</Label>
+            <Select 
+              value={(activeFilters.assignedTo && activeFilters.assignedTo.length > 0) ? activeFilters.assignedTo[0] : 'all'}
+              onValueChange={handleEmployeeChange}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select employee" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="all">All Employees</SelectItem>
+                  <SelectItem value="unassigned">Unassigned</SelectItem>
+                  {employees.map((employee) => (
+                    <SelectItem key={employee._id} value={employee._id}>
+                      {employee.fullName}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Status Filter */}
           <div>
             <Label className="mb-2 block font-medium">Status</Label>
-            {isAdminOrOwner ? (
-              <Select 
-                value={activeFilters.status?.[0] || 'all'}
-                onValueChange={handleStatusDropdownChange}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem value="all">All Status</SelectItem>
-                    {statusOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            ) : (
-              <div className="space-y-2">
-                {statusOptions.map((option) => (
-                  <div key={option.value} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={`status-${option.value}`}
-                      checked={(activeFilters.status || []).includes(option.value)}
-                      onCheckedChange={(checked) => 
-                        handleStatusChange(option.value, checked as boolean)
-                      }
-                    />
-                    <Label 
-                      htmlFor={`status-${option.value}`}
-                      className="text-sm font-normal"
-                    >
+            <Select 
+              value={(activeFilters.status && activeFilters.status.length > 0) ? activeFilters.status[0] : 'all'}
+              onValueChange={handleStatusChange}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="all">All Status</SelectItem>
+                  {statusOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
                       {option.label}
-                    </Label>
-                  </div>
-                ))}
-              </div>
-            )}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
           </div>
           
+          {/* Priority Filter */}
           <div>
             <Label className="mb-2 block font-medium">Priority</Label>
-            <div className="space-y-2">
-              {priorityOptions.map((option) => (
-                <div key={option.value} className="flex items-center space-x-2">
-                  <Checkbox 
-                    id={`priority-${option.value}`}
-                    checked={(activeFilters.priority || []).includes(option.value)}
-                    onCheckedChange={(checked) => 
-                      handlePriorityChange(option.value, checked as boolean)
-                    }
-                  />
-                  <Label 
-                    htmlFor={`priority-${option.value}`}
-                    className="text-sm font-normal"
-                  >
-                    {option.label}
-                  </Label>
-                </div>
-              ))}
-            </div>
+            <Select 
+              value={(activeFilters.priority && activeFilters.priority.length > 0) ? activeFilters.priority[0] : 'all'}
+              onValueChange={handlePriorityChange}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select priority" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="all">All Priority</SelectItem>
+                  {priorityOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
           </div>
           
-          {/* Employee Assignment Filter - Only for Admin/Owner */}
-          {isAdminOrOwner && (
-            <div>
-              <Label className="mb-2 block font-medium">Assigned To</Label>
-              <Select 
-                value={activeFilters.assignedTo || 'all'}
-                onValueChange={handleEmployeeChange}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select employee" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem value="all">All Employees</SelectItem>
-                    <SelectItem value="unassigned">Unassigned</SelectItem>
-                    {employees.map((employee) => (
-                      <SelectItem key={employee._id} value={employee._id}>
-                        {employee.fullName}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-          
+          {/* Category Filter */}
           <div>
             <Label className="mb-2 block font-medium">Category</Label>
             <Select 
@@ -365,6 +303,7 @@ const TaskFilters = ({ sortBy, sortDirection, onSortChange }: TaskFiltersProps) 
             )}
           </div>
           
+          {/* Due Date Filter */}
           <div>
             <Label className="mb-2 block font-medium">Due Date</Label>
             <Select 
@@ -387,6 +326,7 @@ const TaskFilters = ({ sortBy, sortDirection, onSortChange }: TaskFiltersProps) 
             </Select>
           </div>
           
+          {/* Sort By Filter */}
           <div>
             <Label className="mb-2 block font-medium">Sort By</Label>
             <Select 

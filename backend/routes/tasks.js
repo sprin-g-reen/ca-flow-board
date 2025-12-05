@@ -72,13 +72,21 @@ router.get('/', auth, async (req, res) => {
       filter.isArchived = { $ne: true };
     }
     
-    if (status) filter.status = status;
-    if (priority) filter.priority = priority;
+    if (status) {
+      // Handle both string and array formats
+      filter.status = Array.isArray(status) ? status[0] : status;
+    }
+    if (priority) {
+      // Handle both string and array formats  
+      filter.priority = Array.isArray(priority) ? priority[0] : priority;
+    }
     if (assignedTo) {
-      if (assignedTo === 'unassigned') {
+      // Handle both string and array formats
+      const assignedToValue = Array.isArray(assignedTo) ? assignedTo[0] : assignedTo;
+      if (assignedToValue === 'unassigned') {
         filter.assignedTo = null;
       } else {
-        filter.assignedTo = assignedTo;
+        filter.assignedTo = assignedToValue;
       }
     }
     if (client) filter.client = client;
