@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
@@ -189,7 +189,7 @@ const TaskBoard = ({ tasks, basePath }: TaskBoardProps) => {
   const handleSelectAll = (checked: boolean) => {
     setIsSelectAllChecked(checked);
     if (checked) {
-      setSelectedTasks(tasks.map(task => task.id));
+      setSelectedTasks(sortedAndFilteredTasks.map(task => task.id));
     } else {
       setSelectedTasks([]);
     }
@@ -298,12 +298,21 @@ const TaskBoard = ({ tasks, basePath }: TaskBoardProps) => {
     }
     
     if (activeFilters.assignedTo && activeFilters.assignedTo.length > 0) {
-      if (!task.assignedTo.some(userId => {
-        if (typeof userId === 'string') {
-          return activeFilters.assignedTo?.includes(userId);
-        }
-        return activeFilters.assignedTo?.includes((userId as any)._id);
-      })) return false;
+      const assignedToFilter = activeFilters.assignedTo[0]; // Get first value since we use single selection
+      
+      if (assignedToFilter === 'unassigned') {
+        // Check if task has no assignedTo or empty array
+        if (task.assignedTo && task.assignedTo.length > 0) return false;
+      } else {
+        // Check if the specific user is assigned
+        const isAssigned = task.assignedTo && task.assignedTo.some(userId => {
+          if (typeof userId === 'string') {
+            return userId === assignedToFilter;
+          }
+          return (userId as any)._id === assignedToFilter;
+        });
+        if (!isAssigned) return false;
+      }
     }
     
     if (activeFilters.dueDate) {
@@ -345,6 +354,24 @@ const TaskBoard = ({ tasks, basePath }: TaskBoardProps) => {
 
   // Apply sorting to filtered tasks
   const sortedAndFilteredTasks = sortTasks(filteredTasks);
+
+  // Update selection state when filters or tasks change
+  React.useEffect(() => {
+    // Clear selected tasks when filters change or when the filtered results change
+    setSelectedTasks([]);
+    setIsSelectAllChecked(false);
+  }, [activeFilters, tasks]);
+
+  // Update select all checkbox state when selected tasks change
+  React.useEffect(() => {
+    if (sortedAndFilteredTasks.length === 0) {
+      setIsSelectAllChecked(false);
+    } else {
+      const allFilteredTaskIds = sortedAndFilteredTasks.map(task => task.id);
+      const allSelected = allFilteredTaskIds.every(id => selectedTasks.includes(id));
+      setIsSelectAllChecked(allSelected && selectedTasks.length > 0);
+    }
+  }, [selectedTasks, sortedAndFilteredTasks]);
 
   // Handle task drop between columns
   const handleTaskMove = (taskId: string, newStatus: TaskStatus) => {
