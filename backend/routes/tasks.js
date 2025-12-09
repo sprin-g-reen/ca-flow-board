@@ -62,7 +62,7 @@ const upload = multer({
 // @access  Private
 router.get('/', auth, async (req, res) => {
   try {
-    const { status, priority, assignedTo, client, category, sub_category, page = 1, limit = 20, includeArchived = false, search } = req.query;
+    const { status, priority, assignedTo, client, category, sub_category, page = 1, limit = 1000, includeArchived = false, search } = req.query;
     
     // Build filter
     const filter = { firm: req.user.firmId?._id || req.user.firmId };

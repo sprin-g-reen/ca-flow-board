@@ -70,7 +70,7 @@ export const useTasks = () => {
           throw new Error('Authentication token not found');
         }
 
-        const response = await fetch(`${API_BASE_URL}/tasks`, {
+        const response = await fetch(`${API_BASE_URL}/tasks?limit=1000`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
