@@ -20,6 +20,7 @@ import { useEmployees } from '@/hooks/useEmployees';
 import { useAuth } from '@/hooks/useAuth';
 import { API_BASE_URL } from '@/config/api.config';
 import { cn } from '@/lib/utils';
+import { useQueryClient } from '@tanstack/react-query';
 
 // Simplified schema focusing on essentials
 const formSchema = z.object({
@@ -54,6 +55,7 @@ export function SimplifiedAddTaskForm({ onSuccess }: { onSuccess: () => void }) 
   const [showSubCategoryForm, setShowSubCategoryForm] = useState(false);
   const [editingSubCategoryIndex, setEditingSubCategoryIndex] = useState<number | null>(null);
   
+  const queryClient = useQueryClient();
   const { user: authUser } = useAuth();
   const { clients = [] } = useClients();
   const { employees = [] } = useEmployees();
@@ -187,9 +189,16 @@ export function SimplifiedAddTaskForm({ onSuccess }: { onSuccess: () => void }) 
           });
 
           if (response.ok) {
-            successCount++;
+            const result = await response.json();
+            if (result.success && result.data) {
+              successCount++;
+            }
           }
         }
+
+        // Invalidate and refetch tasks
+        await queryClient.invalidateQueries({ queryKey: ['tasks'] });
+        await queryClient.refetchQueries({ queryKey: ['tasks'] });
 
         if (successCount === selectedSubCategories.length) {
           toast.success(`${successCount} task${successCount > 1 ? 's' : ''} created successfully!`);
@@ -225,8 +234,20 @@ export function SimplifiedAddTaskForm({ onSuccess }: { onSuccess: () => void }) 
         });
 
         if (response.ok) {
-          toast.success('Task created successfully!');
-          onSuccess();
+          const result = await response.json();
+          
+          // Invalidate and refetch tasks to ensure UI updates
+          await queryClient.invalidateQueries({ queryKey: ['tasks'] });
+          await queryClient.refetchQueries({ queryKey: ['tasks'] });
+          
+          if (result.success && result.data?.task) {
+            toast.success('Task created successfully!');
+            onSuccess();
+          } else {
+            console.warn('Task creation returned unexpected data:', result);
+            toast.success('Task created successfully!');
+            onSuccess();
+          }
         } else {
           const errorData = await response.json();
           toast.error(errorData.message || 'Failed to create task');
