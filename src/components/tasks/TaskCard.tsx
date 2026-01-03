@@ -82,7 +82,7 @@ const getCategoryBadgeStyles = (category: string) => {
   }
 };
 
-const TaskCard = ({ task, basePath }: TaskCardProps) => {
+  const TaskCard = ({ task, basePath }: TaskCardProps) => {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const { employees } = useEmployees();
   const { clients } = useClients();
@@ -91,6 +91,22 @@ const TaskCard = ({ task, basePath }: TaskCardProps) => {
   
   // Check if user is owner
   const isOwner = user?.role === 'owner';
+  
+  // Extract short title from task title or use sub_category
+  const getShortTitle = () => {
+    // If sub_category exists, use it
+    if ((task as any).sub_category) {
+      return (task as any).sub_category;
+    }
+    // Otherwise, try to extract from title (e.g., "dddd - Income Tax Return - ITR-3 (Business)" -> "ITR-3 (Business)")
+    const parts = task.title.split(' - ');
+    if (parts.length > 2) {
+      // Return the last part (likely the sub-category)
+      return parts[parts.length - 1];
+    }
+    // Fallback to full title
+    return task.title;
+  };
   
   const [{ isDragging }, drag] = useDrag(() => ({
     type: 'TASK',
@@ -106,7 +122,15 @@ const TaskCard = ({ task, basePath }: TaskCardProps) => {
   }));
   
   // Get real client and employee data
-  const client = clients?.find(c => c.id === task.clientId);
+  const client = clients?.find(c => 
+    c.id === task.clientId || 
+    c._id === task.clientId || 
+    (c as any).client?._id === task.clientId ||
+    (c as any).client?.id === task.clientId
+  );
+  
+  // Get client name from client object or fallback to task.clientName
+  const clientName = client?.name || task.clientName;
   
   // Handle assignedTo - it can be an array of strings (IDs) or objects with _id
   const assignedIds = task.assignedTo.map(item => 
@@ -277,17 +301,30 @@ const TaskCard = ({ task, basePath }: TaskCardProps) => {
             )}
           </div>
           
-          <h3 className="font-medium text-base line-clamp-2">{task.title}</h3>
+          {/* Task Title with format: Short Title - Client Name - Employee */}
+          <h3 className="font-medium text-base line-clamp-2">
+            {getShortTitle()}
+            {clientName && (
+              <span className="text-sm font-normal text-gray-600">
+                {' '}- {clientName}
+              </span>
+            )}
+            {assignedEmployees.length > 0 && (
+              <span className="text-sm font-normal text-gray-600">
+                {' '}- {assignedEmployees.map(emp => emp.fullName).join(', ')}
+              </span>
+            )}
+          </h3>
           
           <p className="text-sm text-muted-foreground line-clamp-2">
             {task.description}
           </p>
         
           {/* Client Information */}
-          {client && (
+          {clientName && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground bg-blue-50 p-2 rounded">
               <Building2 className="h-3 w-3 text-blue-600" />
-              <span className="font-medium text-blue-700">{client.name}</span>
+              <span className="font-medium text-blue-700">{clientName}</span>
             </div>
           )}
           

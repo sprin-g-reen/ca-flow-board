@@ -737,7 +737,28 @@ const TaskBoard = ({ tasks, basePath }: TaskBoardProps) => {
                           onClick={(e) => e.stopPropagation()}
                         />
                         <div>
-                          <h4 className="font-medium text-gray-900">{task.title}</h4>
+                          <h4 className="font-medium text-gray-900">
+                            {(() => {
+                              // Extract short title
+                              if ((task as any).sub_category) {
+                                return (task as any).sub_category;
+                              }
+                              const parts = task.title.split(' - ');
+                              return parts.length > 2 ? parts[parts.length - 1] : task.title;
+                            })()}
+                            {task.clientName && (
+                              <span className="text-sm font-normal text-gray-600">
+                                {' '}- {task.clientName}
+                              </span>
+                            )}
+                            {Array.isArray(task.assignedTo) && task.assignedTo.length > 0 && (
+                              <span className="text-sm font-normal text-gray-600">
+                                {' '}- {task.assignedTo.map((user: any) => 
+                                  typeof user === 'string' ? user : (user.fullName || user.email || 'Assigned')
+                                ).join(', ')}
+                              </span>
+                            )}
+                          </h4>
                           <p className="text-sm text-gray-500">{task.description}</p>
                         </div>
                       </div>

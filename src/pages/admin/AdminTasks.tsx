@@ -12,14 +12,17 @@ import TaskBoard from '@/components/tasks/TaskBoard';
 import { FormDialog } from '@/components/shared/FormDialog';
 import { AddTaskForm } from '@/components/forms/AddTaskForm';
 import { useState, useMemo } from "react";
+import { useEmployees } from '@/hooks/useEmployees';
 
 const AdminTasks = () => {
   const { tasks } = useSelector((state: RootState) => state.tasks);
+  const { employees = [] } = useEmployees();
   const [showAddTask, setShowAddTask] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
+  const [assignedToFilter, setAssignedToFilter] = useState('all');
 
   // Filter tasks based on search and filters
   const filteredTasks = useMemo(() => {
@@ -49,8 +52,24 @@ const AdminTasks = () => {
       filtered = filtered.filter(task => task.category === categoryFilter);
     }
 
+    // Assigned To filter
+    if (assignedToFilter !== 'all') {
+      if (assignedToFilter === 'unassigned') {
+        filtered = filtered.filter(task => !task.assignedTo || (Array.isArray(task.assignedTo) && task.assignedTo.length === 0));
+      } else {
+        filtered = filtered.filter(task => {
+          if (Array.isArray(task.assignedTo)) {
+            return task.assignedTo.some((user: any) => 
+              (typeof user === 'string' ? user : user._id || user.id) === assignedToFilter
+            );
+          }
+          return false;
+        });
+      }
+    }
+
     return filtered;
-  }, [tasks, searchTerm, statusFilter, priorityFilter, categoryFilter]);
+  }, [tasks, searchTerm, statusFilter, priorityFilter, categoryFilter, assignedToFilter]);
 
   // Get task counts for tabs
   const taskCounts = useMemo(() => {
@@ -90,17 +109,17 @@ const AdminTasks = () => {
               <TabsTrigger value="all" className="flex items-center gap-2">
                 Tasks ({taskCounts.all})
               </TabsTrigger>
-              <TabsTrigger value="gst" className="flex items-center gap-2">
-                GST {taskCounts.gst > 0 && <Badge variant="secondary" className="ml-1">{taskCounts.gst}</Badge>}
-              </TabsTrigger>
               <TabsTrigger value="itr" className="flex items-center gap-2">
                 ITR {taskCounts.itr > 0 && <Badge variant="secondary" className="ml-1">{taskCounts.itr}</Badge>}
+              </TabsTrigger>
+              <TabsTrigger value="other" className="flex items-center gap-2">
+                Other Task {taskCounts.other > 0 && <Badge variant="secondary" className="ml-1">{taskCounts.other}</Badge>}
               </TabsTrigger>
               <TabsTrigger value="roc" className="flex items-center gap-2">
                 ROC {taskCounts.roc > 0 && <Badge variant="secondary" className="ml-1">{taskCounts.roc}</Badge>}
               </TabsTrigger>
-              <TabsTrigger value="other" className="flex items-center gap-2">
-                Other Task {taskCounts.other > 0 && <Badge variant="secondary" className="ml-1">{taskCounts.other}</Badge>}
+              <TabsTrigger value="gst" className="flex items-center gap-2">
+                GST {taskCounts.gst > 0 && <Badge variant="secondary" className="ml-1">{taskCounts.gst}</Badge>}
               </TabsTrigger>
             </TabsList>
 
@@ -145,7 +164,22 @@ const AdminTasks = () => {
                     </SelectContent>
                   </Select>
 
-                  {(searchTerm || statusFilter !== 'all' || priorityFilter !== 'all') && (
+                  <Select value={assignedToFilter} onValueChange={setAssignedToFilter}>
+                    <SelectTrigger className="w-40 bg-white">
+                      <SelectValue placeholder="Assigned To" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Employees</SelectItem>
+                      <SelectItem value="unassigned">Unassigned</SelectItem>
+                      {employees.map((employee: any) => (
+                        <SelectItem key={employee._id} value={employee._id}>
+                          {employee.fullName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  {(searchTerm || statusFilter !== 'all' || priorityFilter !== 'all' || assignedToFilter !== 'all') && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -153,6 +187,7 @@ const AdminTasks = () => {
                         setSearchTerm('');
                         setStatusFilter('all');
                         setPriorityFilter('all');
+                        setAssignedToFilter('all');
                       }}
                       className="whitespace-nowrap"
                     >
@@ -163,7 +198,7 @@ const AdminTasks = () => {
               </div>
               
               {/* Active Filters Summary */}
-              {(searchTerm || statusFilter !== 'all' || priorityFilter !== 'all' || categoryFilter !== 'all') && (
+              {(searchTerm || statusFilter !== 'all' || priorityFilter !== 'all' || categoryFilter !== 'all' || assignedToFilter !== 'all') && (
                 <div className="mt-3 flex items-center gap-2 text-sm text-gray-600">
                   <Filter className="h-4 w-4" />
                   <span>Showing {filteredTasks.length} of {tasks.length} tasks</span>
@@ -175,11 +210,11 @@ const AdminTasks = () => {
               <TaskBoard tasks={filteredTasks} basePath="/admin" />
             </TabsContent>
             
-            <TabsContent value="gst" className="mt-0">
+            <TabsContent value="itr" className="mt-0">
               <TaskBoard tasks={filteredTasks} basePath="/admin" />
             </TabsContent>
             
-            <TabsContent value="itr" className="mt-0">
+            <TabsContent value="other" className="mt-0">
               <TaskBoard tasks={filteredTasks} basePath="/admin" />
             </TabsContent>
             
@@ -187,7 +222,7 @@ const AdminTasks = () => {
               <TaskBoard tasks={filteredTasks} basePath="/admin" />
             </TabsContent>
             
-            <TabsContent value="other" className="mt-0">
+            <TabsContent value="gst" className="mt-0">
               <TaskBoard tasks={filteredTasks} basePath="/admin" />
             </TabsContent>
           </Tabs>
