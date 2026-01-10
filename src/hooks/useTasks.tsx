@@ -49,12 +49,22 @@ export const useTasks = () => {
     }
   };
 
-  // Category mapping functions
-  const mapDatabaseCategoryToType = (dbCategory: string): TaskCategory => {
-    switch (dbCategory) {
-      case 'gst_filing': return 'gst_filing';
-      case 'income_tax_return': return 'itr_filing';
-      case 'compliance': return 'roc_filing';
+  // Category mapping functions - map from task.type or task.category to frontend category
+  const mapDatabaseCategoryToType = (taskType: string, taskCategory?: string): TaskCategory => {
+    // If task has a category field, use it directly
+    if (taskCategory) {
+      return taskCategory as TaskCategory;
+    }
+    
+    // Otherwise map from type field
+    switch (taskType) {
+      case 'gst_filing': return 'gst';
+      case 'income_tax_return': return 'itr';
+      case 'tds_return': return 'itr';
+      case 'audit': return 'other';
+      case 'compliance': return 'roc';
+      case 'consultation': return 'other';
+      case 'documentation': return 'other';
       default: return 'other';
     }
   };
@@ -104,9 +114,9 @@ export const useTasks = () => {
           description: task.description || '',
           status: mapDatabaseStatusToType(task.status),
           priority: task.priority as TaskPriority,
-          category: mapDatabaseCategoryToType(task.type),
+          category: mapDatabaseCategoryToType(task.type, task.category),
           clientId: task.client?._id || task.client || '',
-          clientName: task.client?.fullName || task.client?.companyName || '',
+          clientName: task.client?.name || task.client?.fullName || task.client?.companyName || '',
           assignedTo: (() => {
             if (!task.assignedTo) return [];
             if (Array.isArray(task.assignedTo)) {
