@@ -11,6 +11,7 @@ import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { ThemeApplier } from './components/layout/ThemeApplier';
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
+import Unauthorized from "./pages/Unauthorized";
 import DashboardLayout from './components/layout/DashboardLayout';
 
 // Owner routes
@@ -65,6 +66,7 @@ const App = () => (
               {/* Public routes */}
               <Route path="/login" element={<Login />} />
               <Route path="/" element={<Navigate to="/login" replace />} />
+              <Route path="/unauthorized" element={<Unauthorized />} />
               
               {/* Owner routes */}
               <Route path="/owner" element={
@@ -89,7 +91,7 @@ const App = () => (
               
               {/* Super Admin routes */}
               <Route path="/admin" element={
-                <ProtectedRoute allowedRoles={['superadmin']}>
+                <ProtectedRoute allowedRoles={['superadmin', 'admin']}>
                   <DashboardLayout />
                 </ProtectedRoute>
               }>

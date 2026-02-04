@@ -1,10 +1,9 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useSelector, useDispatch } from 'react-redux';
+import { useSelector } from 'react-redux';
 import { useAuth } from '@/hooks/useAuth';
 import { RootState } from '@/store';
-import { setUser } from '@/store/slices/authSlice';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -32,7 +31,6 @@ import {
 const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const dispatch = useDispatch();
   const { signIn, signUp } = useAuth();
   
   // Use Redux state for navigation decisions to ensure consistency with ProtectedRoute
@@ -122,22 +120,9 @@ const Login = () => {
       } else {
         toast.success('Welcome back!');
         
-        // Immediately update Redux store to trigger navigation
+        // Navigation will be handled by the useEffect watching isAuthenticated
+        // but we can also trigger it here for immediate feedback
         if (result.data?.user) {
-          dispatch(setUser({
-            id: result.data.user.id,
-            email: result.data.user.email,
-            fullName: result.data.user.fullName || undefined,
-            role: result.data.user.role,
-            phone: result.data.user.phone,
-            avatar: result.data.user.avatar,
-            isActive: result.data.user.isActive,
-            firmId: result.data.user.firmId,
-            createdAt: result.data.user.createdAt,
-            lastLogin: result.data.user.lastLogin
-          }));
-          
-          // Navigate immediately after successful login
           const from = location.state?.from?.pathname || getDefaultRoute(result.data.user.role);
           console.log('🎯 Immediately redirecting to:', from);
           navigate(from, { replace: true });

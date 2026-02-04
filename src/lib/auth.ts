@@ -46,13 +46,17 @@ export function isValidJWTFormat(token: string | null): boolean {
  * @returns string | null - Valid token or null if invalid/missing
  */
 export function getValidatedToken(): string | null {
-  const token = localStorage.getItem('ca_flow_token');
+  const token = localStorage.getItem('ca_flow_token') || localStorage.getItem('token');
   
   if (!isValidJWTFormat(token)) {
-    // Clear invalid token from localStorage
-    if (token) {
-      console.warn('🗑️ Clearing invalid token from localStorage');
+    // Clear invalid tokens from localStorage
+    if (localStorage.getItem('ca_flow_token')) {
+      console.warn('🗑️ Clearing invalid ca_flow_token from localStorage');
       localStorage.removeItem('ca_flow_token');
+    }
+    if (localStorage.getItem('token')) {
+      console.warn('🗑️ Clearing invalid generic token from localStorage');
+      localStorage.removeItem('token');
     }
     return null;
   }
@@ -68,6 +72,7 @@ export function getValidatedToken(): string | null {
 export function setValidatedToken(token: string | null): boolean {
   if (!token) {
     localStorage.removeItem('ca_flow_token');
+    localStorage.removeItem('token');
     return true;
   }
 
@@ -77,6 +82,7 @@ export function setValidatedToken(token: string | null): boolean {
   }
 
   localStorage.setItem('ca_flow_token', token);
+  localStorage.setItem('token', token);
   return true;
 }
 
@@ -85,6 +91,10 @@ export function setValidatedToken(token: string | null): boolean {
  */
 export function clearToken(): void {
   localStorage.removeItem('ca_flow_token');
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
+  localStorage.removeItem('role');
+  localStorage.removeItem('onboardingComplete');
 }
 
 /**

@@ -33,6 +33,7 @@ import { useSettings } from '@/hooks/useSettings';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { logout } from '@/store/slices/authSlice';
+import { clearToken } from '@/lib/auth';
 import { toggleSidebar, toggleChatSidebar } from '@/store/slices/uiSlice';
 import { RootState } from '@/store';
 import { 
@@ -122,6 +123,7 @@ const AppHeader = ({ onAIChatToggle }: AppHeaderProps = {}) => {
 
   const handleLogout = () => {
     toast.loading('Signing out...');
+    clearToken();
     dispatch(logout());
     setTimeout(() => {
       toast.success('Successfully signed out');
