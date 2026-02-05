@@ -38,6 +38,7 @@ import { useInvoices, useInvoice, useUpdateInvoiceStatus, useDeleteInvoice, useB
 import { toggleModal } from '@/store/slices/uiSlice';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '@/store';
+import { toast } from 'sonner';
 
 interface InvoiceFilters {
   search: string;
@@ -170,8 +171,10 @@ const OwnerInvoices = () => {
         invoiceId, 
         status: status as 'paid' | 'draft' | 'sent' | 'overdue' | 'cancelled' | 'partially_paid'
       });
+      toast.success('Status updated successfully');
     } catch (error) {
       console.error('Failed to update invoice status:', error);
+      toast.error('Failed to update status');
     }
   };
 
@@ -187,9 +190,10 @@ const OwnerInvoices = () => {
     if (!result.isConfirmed) return;
     try {
       await deleteInvoiceMutation.mutateAsync(invoiceId);
+      toast.success('Invoice deleted successfully');
     } catch (error) {
       console.error('Failed to delete invoice:', error);
-      await Swal.fire({ title: 'Error', text: 'Failed to delete invoice', icon: 'error' });
+      toast.error('Failed to delete invoice');
     }
   };
 
@@ -222,9 +226,10 @@ const OwnerInvoices = () => {
       await bulkDeleteMutation.mutateAsync(selectedInvoices);
       setSelectedInvoices([]);
       setIsSelectAllChecked(false);
+      toast.success(`${selectedInvoices.length} invoices deleted successfully`);
     } catch (error) {
       console.error('Failed to delete invoices:', error);
-      await Swal.fire({ title: 'Error', text: 'Failed to delete invoices', icon: 'error' });
+      toast.error('Failed to delete invoices');
     }
   };
 
@@ -238,8 +243,10 @@ const OwnerInvoices = () => {
       });
       setSelectedInvoices([]);
       setIsSelectAllChecked(false);
+      toast.success(`Updated ${selectedInvoices.length} invoices to ${status}`);
     } catch (error) {
       console.error('Failed to update invoice statuses:', error);
+      toast.error('Failed to update invoice statuses');
     }
   };
 

@@ -113,7 +113,49 @@ const initializeApp = async () => {
   }
 };
 
-initializeApp();
+// Initialize app and start server
+const startServer = async () => {
+  await initializeApp();
+
+  // Create HTTP server and initialize WebSocket
+  const server = createServer(app);
+
+  // Initialize chat WebSocket service
+  chatWebSocketService.initialize(server);
+  chatWebSocketService.startHealthCheck();
+
+  // Initialize task WebSocket service
+  taskWebSocketService.initialize(server);
+  taskWebSocketService.startHealthCheck();
+
+  // Make WebSocket services available to routes
+  app.set('chatWS', chatWebSocketService);
+  app.set('taskWS', taskWebSocketService);
+
+  // Start server
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 CA Flow Board backend server running on http://0.0.0.0:${PORT}`);
+    console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`);
+    console.log(`🔗 WebSocket server ready for chat connections`);
+    console.log(`🔗 WebSocket server ready for task updates`);
+    console.log(`🌍 Server accessible on all network interfaces (0.0.0.0)`);
+  });
+
+  // Graceful shutdown
+  const shutdown = () => {
+    console.log('📛 Shutdown signal received: closing HTTP server and stopping schedulers');
+    automationScheduler.stopAll();
+    recurringTaskService.stopAll();
+    server.close(() => {
+      console.log('✅ HTTP server closed');
+      process.exit(0);
+    });
+  };
+
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
+};
 
 // Security middleware
 app.use(helmet());
@@ -267,50 +309,7 @@ app.get('/api/cors-test', (req, res) => {
 app.use(notFound);
 app.use(errorHandler);
 
-// Create HTTP server and initialize WebSocket
-const server = createServer(app);
-
-// Initialize chat WebSocket service
-chatWebSocketService.initialize(server);
-chatWebSocketService.startHealthCheck();
-
-// Initialize task WebSocket service
-taskWebSocketService.initialize(server);
-taskWebSocketService.startHealthCheck();
-
-// Make WebSocket services available to routes
-app.set('chatWS', chatWebSocketService);
-app.set('taskWS', taskWebSocketService);
-
-// Start server
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 CA Flow Board backend server running on http://0.0.0.0:${PORT}`);
-  console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`);
-  console.log(`🔗 WebSocket server ready for chat connections`);
-  console.log(`🔗 WebSocket server ready for task updates`);
-  console.log(`🌍 Server accessible on all network interfaces (0.0.0.0)`);
-});
-
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('📛 SIGTERM signal received: closing HTTP server and stopping schedulers');
-  automationScheduler.stopAll();
-  recurringTaskService.stopAll();
-  server.close(() => {
-    console.log('✅ HTTP server closed');
-    process.exit(0);
-  });
-});
-
-process.on('SIGINT', () => {
-  console.log('📛 SIGINT signal received: closing HTTP server and stopping schedulers');
-  automationScheduler.stopAll();
-  recurringTaskService.stopAll();
-  server.close(() => {
-    console.log('✅ HTTP server closed');
-    process.exit(0);
-  });
-});
+// Start the server
+startServer();
 
 export default app;

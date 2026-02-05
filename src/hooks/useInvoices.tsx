@@ -160,11 +160,13 @@ export const useCreateInvoice = () => {
         body: JSON.stringify(invoiceData),
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        throw new Error('Failed to update invoice statuses');
+        throw new Error(data.message || 'Failed to create invoice');
       }
 
-      return response.json();
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
@@ -264,11 +266,13 @@ export const useUpdateInvoice = () => {
         body: JSON.stringify(data),
       });
 
+      const responseData = await response.json();
+
       if (!response.ok) {
-        throw new Error('Failed to update invoice');
+        throw new Error(responseData.message || 'Failed to update invoice');
       }
 
-      return response.json();
+      return responseData;
     },
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });

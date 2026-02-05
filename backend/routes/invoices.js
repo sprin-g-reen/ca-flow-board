@@ -276,9 +276,18 @@ router.get('/last-pricing/:clientId', auth, async (req, res) => {
 // @route   POST /api/invoices
 // @access  Private
 router.post('/', auth, async (req, res) => {
+  console.log('📝 Creating new invoice:', { type: req.body.type, client: req.body.client });
   try {
-    const { collectionMethod, type, ...invoiceBody } = req.body;
+    const { collectionMethod, type, client, ...invoiceBody } = req.body;
     
+    if (!client) {
+      console.log('❌ Validation failed: Client is missing');
+      return res.status(400).json({
+        success: false,
+        message: 'Client is required to create an invoice'
+      });
+    }
+
     // Calculate subtotal if not provided
     let subtotal = invoiceBody.subtotal || 0;
     if (!subtotal && invoiceBody.items && Array.isArray(invoiceBody.items)) {
@@ -313,6 +322,7 @@ router.post('/', auth, async (req, res) => {
 
     const invoiceData = {
       ...invoiceBody,
+      client,
       type: type || 'invoice',
       collectionMethod: collectionMethod || 'account_1',
       firm: req.user.firmId._id,
@@ -329,9 +339,12 @@ router.post('/', auth, async (req, res) => {
       }
     };
 
+    console.log('💾 Saving invoice to database...');
     const invoice = await Invoice.create(invoiceData);
+    console.log('✅ Invoice saved:', invoice._id);
 
     // Populate the created invoice
+    console.log('🔍 Populating invoice data...');
     const populatedInvoice = await Invoice.findById(invoice._id)
       .populate({
         path: 'client',
@@ -342,31 +355,36 @@ router.post('/', auth, async (req, res) => {
     // Handle Razorpay integration for quotations
     let razorpayResult = null;
     if (type === 'quotation' && populatedInvoice.client) {
+      console.log('💳 Initializing Razorpay quotation...');
       try {
         const customerData = {
-          name: populatedInvoice.client.name,
+          name: populatedInvoice.client.name || populatedInvoice.client.fullName,
           email: populatedInvoice.client.email,
-          phone: populatedInvoice.client.phone
+          phone: populatedInvoice.client.phone || '0000000000'
         };
 
         const lineItems = populatedInvoice.items?.map(item => ({
-          name: item.description,
-          amount: item.amount * 100, // Convert to paise
+          name: item.title || item.description,
+          amount: Math.round(item.amount * 100), // Convert to paise
           currency: 'INR'
         })) || [];
 
-        razorpayResult = await RazorpayService.createQuotation({
-          amount: populatedInvoice.totalAmount,
-          description: `Quotation #${populatedInvoice.invoiceNumber}`,
-          customer: customerData,
-          collectionMethod: collectionMethod || 'account_1',
-          validityPeriod: 30,
-          lineItems,
-          notes: {
-            invoice_id: invoice._id.toString(),
-            firm_id: req.user.firmId._id.toString()
-          }
-        });
+        console.log('📡 Calling Razorpay API...');
+        razorpayResult = await callRazorpayWithTimeout(
+          RazorpayService.createQuotation({
+            amount: populatedInvoice.totalAmount,
+            description: `Quotation #${populatedInvoice.invoiceNumber}`,
+            customer: customerData,
+            collectionMethod: collectionMethod || 'account_1',
+            validityPeriod: 30,
+            lineItems,
+            notes: {
+              invoice_id: invoice._id.toString(),
+              firm_id: req.user.firmId._id.toString()
+            }
+          })
+        );
+        console.log('✅ Razorpay API responded:', razorpayResult.success ? 'SUCCESS' : 'FAILED');
 
         // Update invoice with Razorpay data if successful
         if (razorpayResult.success && razorpayResult.payment_link) {
@@ -376,13 +394,15 @@ router.post('/', auth, async (req, res) => {
             collectionMethod: collectionMethod
           };
           await populatedInvoice.save();
+          console.log('💾 Updated invoice with Razorpay data');
         }
       } catch (razorpayError) {
-        console.error('Razorpay quotation creation error:', razorpayError);
+        console.error('❌ Razorpay quotation creation error:', razorpayError.message);
         // Don't fail the invoice creation if Razorpay fails
       }
     }
 
+    console.log('🚀 Sending success response');
     res.status(201).json({
       success: true,
       data: populatedInvoice,
@@ -392,23 +412,65 @@ router.post('/', auth, async (req, res) => {
         : 'Invoice created successfully'
     });
   } catch (error) {
-    console.error('Create invoice error:', error);
+    console.error('❌ Create invoice error:', error.message);
+    
+    // Handle Mongoose validation errors specifically
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(val => val.message);
+      return res.status(400).json({
+        success: false,
+        message: 'Validation Error: ' + messages.join(', '),
+        error: messages
+      });
+    }
+
     res.status(500).json({
       success: false,
-      message: 'Server error',
+      message: 'Server error: ' + error.message,
       error: error.message
     });
   }
 });
 
+// Helper to call Razorpay with a timeout
+const callRazorpayWithTimeout = async (task, timeoutMs = 10000) => {
+  return Promise.race([
+    task,
+    new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Razorpay API timeout')), timeoutMs)
+    )
+  ]);
+};
+
 // @desc    Update invoice
 // @route   PUT /api/invoices/:id
 // @access  Private
 router.put('/:id', auth, async (req, res) => {
+  console.log('📝 Updating invoice:', req.params.id);
   try {
+    const { type, collectionMethod, client } = req.body;
+    
+    // Remove immutable fields
+    const updateData = { ...req.body };
+    delete updateData._id;
+    delete updateData.invoiceNumber;
+    delete updateData.firm;
+    delete updateData.createdBy;
+    delete updateData.createdAt;
+    delete updateData.updatedAt;
+
+    // Basic validation
+    if (client === '') {
+      return res.status(400).json({
+        success: false,
+        message: 'Client cannot be empty'
+      });
+    }
+
+    console.log('💾 Updating database record...');
     const invoice = await Invoice.findOneAndUpdate(
       { _id: req.params.id, firm: req.user.firmId._id },
-      req.body,
+      updateData,
       { new: true, runValidators: true }
     )
       .populate({
@@ -418,22 +480,82 @@ router.put('/:id', auth, async (req, res) => {
       .populate('createdBy', 'fullName email');
 
     if (!invoice) {
+      console.log('❌ Invoice not found');
       return res.status(404).json({
         success: false,
-        message: 'Invoice not found'
+        message: 'Invoice not found or unauthorized'
       });
     }
 
+    // Handle Razorpay link generation if it's a quotation and status is 'sent'
+    let razorpayResult = null;
+    if (invoice.type === 'quotation' && req.body.status === 'sent' && !invoice.razorpayData?.paymentLinkId) {
+      console.log('💳 Generating Razorpay link for updated quotation...');
+      try {
+        const customerData = {
+          name: invoice.client.fullName || invoice.client.name || 'Client',
+          email: invoice.client.email,
+          phone: invoice.client.phone || '0000000000' // Razorpay requires a contact
+        };
+
+        const lineItems = invoice.items?.map(item => ({
+          name: item.title || item.description,
+          amount: Math.round(item.amount * 100),
+          currency: 'INR'
+        })) || [];
+
+        razorpayResult = await callRazorpayWithTimeout(
+          RazorpayService.createQuotation({
+            amount: invoice.totalAmount,
+            description: `Quotation #${invoice.invoiceNumber}`,
+            customer: customerData,
+            collectionMethod: invoice.collectionMethod || 'account_1',
+            validityPeriod: 30,
+            lineItems,
+            notes: {
+              invoice_id: invoice._id.toString(),
+              firm_id: req.user.firmId._id.toString(),
+              updated: 'true'
+            }
+          })
+        );
+
+        if (razorpayResult.success && razorpayResult.payment_link) {
+          invoice.razorpayData = {
+            paymentLinkId: razorpayResult.quotation.id,
+            shortUrl: razorpayResult.quotation.short_url,
+            collectionMethod: invoice.collectionMethod
+          };
+          await invoice.save();
+          console.log('✅ Updated with Razorpay link');
+        }
+      } catch (err) {
+        console.error('⚠️ Razorpay integration skipped/failed during update:', err.message);
+      }
+    }
+
+    console.log('🚀 Sending success response');
     res.json({
       success: true,
       data: invoice,
+      razorpay: razorpayResult,
       message: 'Invoice updated successfully'
     });
   } catch (error) {
-    console.error('Update invoice error:', error);
+    console.error('❌ Update invoice error:', error.message);
+    
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(val => val.message);
+      return res.status(400).json({
+        success: false,
+        message: 'Validation Error: ' + messages.join(', '),
+        error: messages
+      });
+    }
+
     res.status(500).json({
       success: false,
-      message: 'Server error',
+      message: 'Server error: ' + error.message,
       error: error.message
     });
   }

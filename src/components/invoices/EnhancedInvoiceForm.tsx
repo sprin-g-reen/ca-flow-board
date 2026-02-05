@@ -23,11 +23,12 @@ import { Separator } from '@/components/ui/separator';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { useCreateInvoice } from '@/hooks/useInvoices';
+import { useCreateInvoice, useUpdateInvoice } from '@/hooks/useInvoices';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { useClients } from '@/hooks/useClients';
 import { InvoicePreviewModal } from '@/components/invoices/InvoicePreviewModal';
+import { toast } from 'sonner';
 
 interface InvoiceItem {
   title: string;
@@ -45,6 +46,7 @@ interface InvoiceItem {
 }
 
 interface InvoiceFormData {
+  _id?: string;
   type: 'invoice' | 'quotation' | 'proforma';
   client: string;
   issueDate: Date;
@@ -90,7 +92,10 @@ export const EnhancedInvoiceForm = ({
 
   const { isAuthenticated } = useAuth();
   const createInvoiceMutation = useCreateInvoice();
+  const updateInvoiceMutation = useUpdateInvoice();
   
+  const isPending = createInvoiceMutation.isPending || updateInvoiceMutation.isPending;
+
   // Fetch clients using the proper hook
   const { clients, isLoading: clientsLoading } = useClients();
 
@@ -133,23 +138,17 @@ export const EnhancedInvoiceForm = ({
     name: 'items'
   });
 
-  // Watch all form values to trigger calculations
+  // Watch items and discount for calculations
   const watchedItems = form.watch('items');
   const watchedDiscount = form.watch('discount');
-  const watchAllFields = form.watch(); // Watch everything to ensure updates
 
   // Calculate totals whenever items or discount changes
   useEffect(() => {
-    // Ensure we have valid items array
-    if (!watchedItems || !Array.isArray(watchedItems)) {
-      return;
-    }
+    if (!watchedItems || !Array.isArray(watchedItems)) return;
 
     const subtotal = watchedItems.reduce((sum, item) => {
-      const quantity = Number(item?.quantity) || 0;
-      const rate = Number(item?.rate) || 0;
-      const itemAmount = quantity * rate;
-      return sum + (isNaN(itemAmount) ? 0 : itemAmount);
+      const itemAmount = (Number(item?.quantity) || 0) * (Number(item?.rate) || 0);
+      return sum + itemAmount;
     }, 0);
 
     const discountValue = Number(watchedDiscount?.value) || 0;
@@ -157,45 +156,46 @@ export const EnhancedInvoiceForm = ({
       ? (subtotal * discountValue) / 100
       : discountValue;
 
-    const discountedAmount = subtotal - discountAmount;
-
     const taxAmount = watchedItems.reduce((sum, item) => {
-      if (item?.taxable !== false) { // Default to taxable if undefined
-        const quantity = Number(item?.quantity) || 0;
-        const rate = Number(item?.rate) || 0;
-        const taxRate = Number(item?.taxRate) || 0;
-        const itemAmount = quantity * rate;
-        const itemTax = (itemAmount * taxRate) / 100;
-        return sum + (isNaN(itemTax) ? 0 : itemTax);
+      if (item?.taxable !== false) {
+        const itemAmount = (Number(item?.quantity) || 0) * (Number(item?.rate) || 0);
+        return sum + (itemAmount * (Number(item?.taxRate) || 0)) / 100;
       }
       return sum;
     }, 0);
 
-    const total = discountedAmount + taxAmount;
+    const total = subtotal - discountAmount + taxAmount;
 
     setCalculations({
-      subtotal: isNaN(subtotal) ? 0 : subtotal,
-      discountAmount: isNaN(discountAmount) ? 0 : discountAmount,
-      taxAmount: isNaN(taxAmount) ? 0 : taxAmount,
-      total: isNaN(total) ? 0 : total
+      subtotal: Number(subtotal.toFixed(2)),
+      discountAmount: Number(discountAmount.toFixed(2)),
+      taxAmount: Number(taxAmount.toFixed(2)),
+      total: Number(total.toFixed(2))
     });
 
-    // Update item amounts
+    // Sync amounts in form state without triggering heavy validation
     watchedItems.forEach((item, index) => {
-      const quantity = Number(item?.quantity) || 0;
-      const rate = Number(item?.rate) || 0;
-      const amount = quantity * rate;
-      if (!isNaN(amount) && amount !== item?.amount) {
-        form.setValue(`items.${index}.amount`, amount, { shouldValidate: false });
+      const amount = (Number(item?.quantity) || 0) * (Number(item?.rate) || 0);
+      const roundedAmount = Number(amount.toFixed(2));
+      if (Math.abs(roundedAmount - (item?.amount || 0)) > 0.01) {
+        form.setValue(`items.${index}.amount`, roundedAmount, { shouldValidate: false });
       }
     });
-  }, [watchedItems, watchedDiscount, watchAllFields, form]);
+  }, [watchedItems, watchedDiscount, form]);
 
-  const onSubmit = async (data: InvoiceFormData) => {
+  const handleFormSubmit = async (status: 'draft' | 'sent') => {
+    const data = form.getValues();
+    
+    if (!data.client) {
+      toast.error('Please select a client before saving');
+      return;
+    }
+
+    console.log('📤 Submitting invoice:', { status, data });
     try {
       const invoiceData = {
         ...data,
-        client: data.client, // This will be the client ID string
+        status, // Set status based on button clicked
         subtotal: calculations.subtotal,
         taxAmount: calculations.taxAmount,
         discount: {
@@ -203,20 +203,34 @@ export const EnhancedInvoiceForm = ({
           amount: calculations.discountAmount
         },
         totalAmount: calculations.total,
-        paidAmount: 0,
         balanceAmount: calculations.total,
         gst: {
-          cgst: calculations.taxAmount / 2,
-          sgst: calculations.taxAmount / 2,
-          igst: 0,
+          cgst: isInterState ? 0 : calculations.taxAmount / 2,
+          sgst: isInterState ? 0 : calculations.taxAmount / 2,
+          igst: isInterState ? calculations.taxAmount : 0,
           applicable: true
         }
       };
 
-      await createInvoiceMutation.mutateAsync(invoiceData as any);
+      // Clean up data for PUT request
+      const payload = { ...invoiceData };
+      const invoiceId = payload._id;
+      delete payload._id;
+
+      if (isEditing && invoiceId) {
+        await updateInvoiceMutation.mutateAsync({
+          invoiceId,
+          data: payload as any
+        });
+        toast.success(`Invoice updated and ${status === 'sent' ? 'sent' : 'saved as draft'}`);
+      } else {
+        await createInvoiceMutation.mutateAsync(payload as any);
+        toast.success(`Invoice created and ${status === 'sent' ? 'sent' : 'saved as draft'}`);
+      }
       onSuccess();
-    } catch (error) {
-      console.error('Failed to create invoice:', error);
+    } catch (error: any) {
+      console.error('Failed to save invoice:', error);
+      toast.error(error.message || 'Failed to save invoice');
     }
   };
 
@@ -233,23 +247,20 @@ export const EnhancedInvoiceForm = ({
     });
   };
 
-  // Debug log
-  console.log('Clients from useClients hook:', clients);
-
   return (
     <div className="max-w-4xl mx-auto p-6">
       {/* Clean Header */}
       <div className="text-center mb-8">
-        <h2 className="text-2xl font-semibold text-gray-900 mb-2">Create New Invoice</h2>
+        <h2 className="text-2xl font-semibold text-gray-900 mb-2">{isEditing ? 'Edit Invoice' : 'Create New Invoice'}</h2>
         <p className="text-gray-600 text-sm">Generate a professional invoice for your client</p>
       </div>
 
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+      <div className="space-y-8">
         {/* Section 1: Basic Information */}
         <Card className="shadow-sm border-gray-200">
           <CardContent className="p-8 space-y-8">
             <div className="space-y-6">
-              <h3 className="text-lg font-medium text-gray-900 border-b border-gray-200 pb-3">Invoice</h3>
+              <h3 className="text-lg font-medium text-gray-900 border-b border-gray-200 pb-3">Invoice Details</h3>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
@@ -306,13 +317,13 @@ export const EnhancedInvoiceForm = ({
                     <PopoverTrigger asChild>
                       <Button variant="outline" className="w-full h-11 justify-start text-left font-normal border-gray-300 hover:border-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
                         <CalendarIcon className="mr-2 h-4 w-4" />
-                        {form.watch('issueDate') ? format(form.watch('issueDate'), 'dd/MM/yyyy') : 'Pick a date'}
+                        {form.watch('issueDate') ? format(new Date(form.watch('issueDate')), 'dd/MM/yyyy') : 'Pick a date'}
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0">
                       <Calendar
                         mode="single"
-                        selected={form.watch('issueDate')}
+                        selected={new Date(form.watch('issueDate'))}
                         onSelect={(date) => {
                           if (date) {
                             form.setValue('issueDate', date);
@@ -331,13 +342,13 @@ export const EnhancedInvoiceForm = ({
                     <PopoverTrigger asChild>
                       <Button variant="outline" className="w-full h-11 justify-start text-left font-normal border-gray-300 hover:border-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
                         <CalendarIcon className="mr-2 h-4 w-4" />
-                        {form.watch('dueDate') ? format(form.watch('dueDate'), 'dd/MM/yyyy') : 'Pick a date'}
+                        {form.watch('dueDate') ? format(new Date(form.watch('dueDate')), 'dd/MM/yyyy') : 'Pick a date'}
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0">
                       <Calendar
                         mode="single"
-                        selected={form.watch('dueDate')}
+                        selected={new Date(form.watch('dueDate'))}
                         onSelect={(date) => {
                           if (date) {
                             form.setValue('dueDate', date);
@@ -469,61 +480,10 @@ export const EnhancedInvoiceForm = ({
           </CardContent>
         </Card>
 
-        {/* Section 3: Tax Breakdown */}
+        {/* Section 3: Calculations */}
         <Card className="shadow-sm border-gray-200">
           <CardContent className="p-8 space-y-6">
-            <h3 className="text-lg font-medium text-gray-900 border-b border-gray-200 pb-3">Tax Breakdown</h3>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {watchedItems.map((item, index) => {
-                const itemAmount = (item.quantity || 0) * (item.rate || 0);
-                const taxAmount = (itemAmount * (item.taxRate || 0)) / 100;
-                const cgstAmount = isInterState ? 0 : taxAmount / 2;
-                const sgstAmount = isInterState ? 0 : taxAmount / 2;
-                const igstAmount = isInterState ? taxAmount : 0;
-                
-                return (
-                  item.hsn && (
-                    <div key={index} className="p-4 border border-gray-200 rounded-lg space-y-3 bg-gray-50">
-                      <div className="space-y-1">
-                        <div className="text-sm font-medium text-gray-900">
-                          HSN: {item.hsn}
-                        </div>
-                        <div className="text-xs text-gray-600">
-                          {item.description || 'Item ' + (index + 1)}
-                        </div>
-                      </div>
-                      <div className="space-y-2 pt-2 border-t border-gray-200">
-                        {isInterState ? (
-                          <div className="flex justify-between text-xs">
-                            <span className="text-gray-600">IGST ({item.taxRate || 0}%):</span>
-                            <span className="font-medium">₹{igstAmount.toFixed(2)}</span>
-                          </div>
-                        ) : (
-                          <>
-                            <div className="flex justify-between text-xs">
-                              <span className="text-gray-600">CGST ({(item.taxRate || 0) / 2}%):</span>
-                              <span className="font-medium">₹{cgstAmount.toFixed(2)}</span>
-                            </div>
-                            <div className="flex justify-between text-xs">
-                              <span className="text-gray-600">SGST ({(item.taxRate || 0) / 2}%):</span>
-                              <span className="font-medium">₹{sgstAmount.toFixed(2)}</span>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  )
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Section 4: Calculations */}
-        <Card className="shadow-sm border-gray-200">
-          <CardContent className="p-8 space-y-6">
-            <h3 className="text-lg font-medium text-gray-900 border-b border-gray-200 pb-3">Calculations</h3>
+            <h3 className="text-lg font-medium text-gray-900 border-b border-gray-200 pb-3">Final Calculations</h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-4">
@@ -584,115 +544,57 @@ export const EnhancedInvoiceForm = ({
           </CardContent>
         </Card>
 
-        {/* Section 5: Payment Details & Terms */}
+        {/* Section 4: Payment Details */}
         <Card className="shadow-sm border-gray-200">
           <CardContent className="p-8 space-y-8">
-            <div className="space-y-6">
-              <h3 className="text-lg font-medium text-gray-900 border-b border-gray-200 pb-3">Payment Details & Terms</h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-700">Payment Terms</Label>
-                  <Select
-                    value={form.watch('paymentTerms')}
-                    onValueChange={(value) => form.setValue('paymentTerms', value)}
-                  >
-                    <SelectTrigger className="h-11 border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Net 15">Net 15 days</SelectItem>
-                      <SelectItem value="Net 30">Net 30 days</SelectItem>
-                      <SelectItem value="Net 45">Net 45 days</SelectItem>
-                      <SelectItem value="Due on Receipt">Due on Receipt</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-700">Collection Method</Label>
-                  <Select
-                    value={form.watch('collectionMethod')}
-                    onValueChange={(value) => form.setValue('collectionMethod', value as any)}
-                  >
-                    <SelectTrigger className="h-11 border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="account_1">Account 1</SelectItem>
-                      <SelectItem value="account_2">Account 2</SelectItem>
-                      <SelectItem value="cash">Cash</SelectItem>
-                      <SelectItem value="cheque">Cheque</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-6">
-              <h3 className="text-lg font-medium text-gray-900 border-b border-gray-200 pb-3">Bank Account Details</h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-700">Account Holder Name</Label>
-                  <Input
-                    {...form.register('bankDetails.accountName')}
-                    placeholder="CA Flow & Associates"
-                    className="h-11 border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-700">Account Number</Label>
-                  <Input
-                    {...form.register('bankDetails.accountNumber')}
-                    placeholder="123456789012"
-                    className="h-11 border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-700">Bank Name</Label>
-                  <Input
-                    {...form.register('bankDetails.bankName')}
-                    placeholder="State Bank of India"
-                    className="h-11 border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-700">IFSC Code</Label>
-                  <Input
-                    {...form.register('bankDetails.ifscCode')}
-                    placeholder="SBIN0001234"
-                    className="h-11 border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-6">
-              <h3 className="text-lg font-medium text-gray-900 border-b border-gray-200 pb-3">Additional Information</h3>
-
+            <h3 className="text-lg font-medium text-gray-900 border-b border-gray-200 pb-3">Payment Details & Terms</h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
-                <Label className="text-sm font-medium text-gray-700">Notes</Label>
-                <Textarea
-                  {...form.register('notes')}
-                  placeholder="Additional notes for the client"
-                  rows={3}
-                  className="resize-none border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                />
+                <Label className="text-sm font-medium text-gray-700">Payment Terms</Label>
+                <Select
+                  value={form.watch('paymentTerms')}
+                  onValueChange={(value) => form.setValue('paymentTerms', value)}
+                >
+                  <SelectTrigger className="h-11 border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Net 15">Net 15 days</SelectItem>
+                    <SelectItem value="Net 30">Net 30 days</SelectItem>
+                    <SelectItem value="Net 45">Net 45 days</SelectItem>
+                    <SelectItem value="Due on Receipt">Due on Receipt</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">
-                <Label className="text-sm font-medium text-gray-700">Terms & Conditions</Label>
-                <Textarea
-                  {...form.register('terms')}
-                  placeholder="Terms and conditions"
-                  rows={3}
-                  className="resize-none border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                />
+                <Label className="text-sm font-medium text-gray-700">Collection Method</Label>
+                <Select
+                  value={form.watch('collectionMethod')}
+                  onValueChange={(value) => form.setValue('collectionMethod', value as any)}
+                >
+                  <SelectTrigger className="h-11 border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="account_1">Account 1 (Razorpay)</SelectItem>
+                    <SelectItem value="account_2">Account 2 (Razorpay)</SelectItem>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="cheque">Cheque</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-gray-700">Notes</Label>
+              <Textarea
+                {...form.register('notes')}
+                placeholder="Additional notes for the client"
+                rows={3}
+                className="resize-none border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              />
             </div>
           </CardContent>
         </Card>
@@ -703,6 +605,7 @@ export const EnhancedInvoiceForm = ({
             type="button" 
             variant="outline"
             onClick={onSuccess}
+            disabled={isPending}
             className="h-11 px-6 text-sm font-medium border-gray-300 hover:bg-gray-50"
           >
             Cancel
@@ -720,12 +623,13 @@ export const EnhancedInvoiceForm = ({
             </Button>
 
             <Button
-              type="submit"
-              disabled={createInvoiceMutation.isPending}
+              type="button"
+              disabled={isPending}
               variant="outline"
+              onClick={() => handleFormSubmit('draft')}
               className="h-11 px-6 text-sm font-medium border-gray-300 hover:bg-gray-50"
             >
-              {createInvoiceMutation.isPending ? (
+              {isPending ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-2 border-gray-600 border-t-transparent mr-2" />
                   Saving...
@@ -733,20 +637,21 @@ export const EnhancedInvoiceForm = ({
               ) : (
                 <>
                   <Save className="h-4 w-4 mr-2" />
-                  {isEditing ? 'Update' : 'Save'} Draft
+                  Save Draft
                 </>
               )}
             </Button>
             
             <Button
-              type="submit"
-              disabled={createInvoiceMutation.isPending}
+              type="button"
+              disabled={isPending}
+              onClick={() => handleFormSubmit('sent')}
               className="h-11 px-8 text-sm font-medium bg-blue-600 hover:bg-blue-700"
             >
-              {createInvoiceMutation.isPending ? (
+              {isPending ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2" />
-                  Creating...
+                  Sending...
                 </>
               ) : (
                 <>
@@ -760,7 +665,7 @@ export const EnhancedInvoiceForm = ({
             </Button>
           </div>
         </div>
-      </form>
+      </div>
 
       {/* Invoice Preview Modal */}
       <InvoicePreviewModal

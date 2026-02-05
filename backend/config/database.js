@@ -32,10 +32,13 @@ const connectDB = async () => {
 
   } catch (error) {
     // Log full error for easier debugging (stack included)
-    console.error('❌ Error connecting to MongoDB:', error);
-    // Do not exit immediately during development — allow the app to handle retries if desired
-    // But keep the exit for CI/production to avoid running in a broken state
-    if (process.env.NODE_ENV === 'production') process.exit(1);
+    console.error('❌ Error connecting to MongoDB:', error.message);
+    console.error('💡 Please ensure MongoDB is running and accessible.');
+    console.error('   On Windows: Check if "MongoDB" service is started in Services.msc');
+    console.error('   On macOS: brew services start mongodb-community');
+    
+    // Rethrow to allow caller to handle failure
+    throw error;
   }
 };
 

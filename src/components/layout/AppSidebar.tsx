@@ -203,6 +203,7 @@ const AppSidebar = ({ onChatToggle }: AppSidebarProps = {}) => {
       case 'owner':
         return ownerLinks;
       case 'superadmin':
+      case 'admin':
         return adminLinks;
       case 'employee':
         return employeeLinks;
@@ -247,11 +248,14 @@ const AppSidebar = ({ onChatToggle }: AppSidebarProps = {}) => {
                 </NavLink>
               ))}
               {/* GST Reports in collapsed mode */}
-              {role === 'owner' && (
+              {(role === 'owner' || role === 'admin' || role === 'superadmin') && (
                 <SidebarMenuItem
                   icon={ownerGSTReportsMenu.icon}
                   label={ownerGSTReportsMenu.label}
-                  subItems={ownerGSTReportsMenu.subItems}
+                  subItems={ownerGSTReportsMenu.subItems.map(item => ({
+                    ...item,
+                    to: item.to.replace('/owner/', `/${role === 'owner' ? 'owner' : 'admin'}/`)
+                  }))}
                 />
               )}
             </div>
@@ -267,11 +271,14 @@ const AppSidebar = ({ onChatToggle }: AppSidebarProps = {}) => {
                 />
               ))}
               {/* GST Reports menu (after Views) */}
-              {role === 'owner' && (
+              {(role === 'owner' || role === 'admin' || role === 'superadmin') && (
                 <SidebarMenuItem
                   icon={ownerGSTReportsMenu.icon}
                   label={ownerGSTReportsMenu.label}
-                  subItems={ownerGSTReportsMenu.subItems}
+                  subItems={ownerGSTReportsMenu.subItems.map(item => ({
+                    ...item,
+                    to: item.to.replace('/owner/', `/${role === 'owner' ? 'owner' : 'admin'}/`)
+                  }))}
                 />
               )}
             </nav>

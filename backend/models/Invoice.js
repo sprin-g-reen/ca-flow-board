@@ -343,7 +343,7 @@ invoiceSchema.pre('save', async function(next) {
         $gte: new Date(new Date().getFullYear(), 3, 1), // Financial year starts from April
         $lt: new Date(new Date().getFullYear() + 1, 3, 1)
       }
-    });
+    }).maxTimeMS(5000); // 5 second timeout
     
     const year = new Date().getFullYear().toString().slice(-2);
     this.invoiceNumber = `${prefix}${year}${String(count + 1).padStart(4, '0')}`;

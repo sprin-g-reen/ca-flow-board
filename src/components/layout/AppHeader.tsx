@@ -122,10 +122,11 @@ const AppHeader = ({ onAIChatToggle }: AppHeaderProps = {}) => {
   }, [role, user]);
 
   const handleLogout = () => {
-    toast.loading('Signing out...');
+    const toastId = toast.loading('Signing out...');
     clearToken();
     dispatch(logout());
     setTimeout(() => {
+      toast.dismiss(toastId);
       toast.success('Successfully signed out');
       navigate('/login');
     }, 1000);
